@@ -1,0 +1,36 @@
+# Drishti gateway configuration.
+# Everything has a working default; you only set what you want to change.
+# Environment variables override this file (DRISHTI_ANSWER_URL, BHASHINI_*).
+
+[server]
+host = "0.0.0.0"
+port = 8080
+
+[tts]
+voices_dir = "../piper-voices"
+# Each loaded voice costs roughly 60 MB of RAM. 3 is right for a 2 GB box;
+# raise it on a laptop, lower it on something smaller.
+max_loaded_voices = 3
+
+[asr]
+# "small" is the speed/accuracy balance for CPU. "medium" is ~3x the download
+# and did NOT fix Indic accuracy in our testing — see languages.py.
+model = "small"
+compute_type = "int8"
+
+[translate]
+model = "facebook/nllb-200-distilled-600M"
+
+[answer]
+# An OpenAI-compatible endpoint. Ollama: http://localhost:11434/api/chat
+# Leave blank to disable ASK entirely (SPEAK / UNDERSTAND / READ still work).
+url = ""
+model = "llama3.2:1b"
+
+[cloud]
+# Bhashini (Government of India, free). Needed for Tamil/Punjabi speech and for
+# recognising every Indic language except Hindi. Get these from bhashini.gov.in
+# under "My Profile". Without them the box runs fully offline but with the gaps
+# reported honestly by /v1/languages.
+bhashini_user_id = ""
+bhashini_api_key = ""

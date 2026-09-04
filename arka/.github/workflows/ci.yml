@@ -1,0 +1,67 @@
+name: CI
+
+# Every push to a branch and every PR into main. The tests are only worth
+# having if something runs them without being asked.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  # A new push supersedes the run already in flight for the same ref.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # The suite is deliberately integration-level: the guarantees that matter
+    # are concurrency guarantees expressed in SQL — a guarded updateMany,
+    # FOR UPDATE SKIP LOCKED, a conditional ON CONFLICT. Mocking the database
+    # would assert that the mock behaves as written and prove nothing.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: arka
+          POSTGRES_PASSWORD: arka
+          POSTGRES_DB: arka_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U arka"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      TEST_DATABASE_URL: postgresql://arka:arka@localhost:5432/arka_test
+      DATABASE_URL: postgresql://arka:arka@localhost:5432/arka_test
+      BETTER_AUTH_SECRET: ci-secret-at-least-sixteen-characters
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # The client is generated, not committed, so nothing typechecks without it.
+      - run: npx prisma generate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build

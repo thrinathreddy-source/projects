@@ -1,0 +1,28 @@
+# The one Python environment (~1.5 GB). Rebuild:
+#   python3 -m venv piper-venv && source piper-venv/bin/activate
+#   pip install -r gateway/requirements.txt
+*-venv/
+
+# Voice models (~328 MB) — re-fetch with:
+#   python3 -m piper.download_voices --download-dir piper-voices <voice>
+piper-voices/
+
+*.log
+*.wav
+
+# Sparse checkout of BasedHardware/omi carrying OUR fork in omi/omiGlass.
+# It has a nested .git. To version the fork here, move omi/omiGlass up a level
+# and drop that .git first — see ARCHITECTURE.md.
+omi/
+
+# Node
+node_modules/
+.expo/
+dist/
+
+# Env / secrets
+.env
+.env.local
+
+# macOS
+.DS_Store

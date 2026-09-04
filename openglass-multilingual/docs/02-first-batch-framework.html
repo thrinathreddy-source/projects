@@ -1,0 +1,448 @@
+<title>First Batch: Total Production Framework</title>
+<style>
+  :root {
+    --bg: #f7f8fa;
+    --surface: #ffffff;
+    --ink: #14181f;
+    --ink-soft: #55606e;
+    --ink-faint: #8b95a3;
+    --steel: #2b5f8a;
+    --steel-soft: rgba(43,95,138,0.10);
+    --amber: #9a5b0b;
+    --amber-soft: rgba(154,91,11,0.11);
+    --alert: #a8341f;
+    --alert-soft: rgba(168,52,31,0.10);
+    --go: #1f6b4a;
+    --go-soft: rgba(31,107,74,0.11);
+    --line: rgba(20,24,31,0.13);
+    --line-strong: rgba(20,24,31,0.26);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1116;
+      --surface: #161b22;
+      --ink: #e6eaf0;
+      --ink-soft: #a3aebd;
+      --ink-faint: #6e7987;
+      --steel: #6fb0e0;
+      --steel-soft: rgba(111,176,224,0.13);
+      --amber: #e0a253;
+      --amber-soft: rgba(224,162,83,0.13);
+      --alert: #e8705a;
+      --alert-soft: rgba(232,112,90,0.13);
+      --go: #5cc697;
+      --go-soft: rgba(92,198,151,0.13);
+      --line: rgba(230,234,240,0.14);
+      --line-strong: rgba(230,234,240,0.28);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e1116; --surface: #161b22; --ink: #e6eaf0; --ink-soft: #a3aebd;
+    --ink-faint: #6e7987; --steel: #6fb0e0; --steel-soft: rgba(111,176,224,0.13);
+    --amber: #e0a253; --amber-soft: rgba(224,162,83,0.13); --alert: #e8705a;
+    --alert-soft: rgba(232,112,90,0.13); --go: #5cc697; --go-soft: rgba(92,198,151,0.13);
+    --line: rgba(230,234,240,0.14); --line-strong: rgba(230,234,240,0.28);
+  }
+  :root[data-theme="light"] {
+    --bg: #f7f8fa; --surface: #ffffff; --ink: #14181f; --ink-soft: #55606e;
+    --ink-faint: #8b95a3; --steel: #2b5f8a; --steel-soft: rgba(43,95,138,0.10);
+    --amber: #9a5b0b; --amber-soft: rgba(154,91,11,0.11); --alert: #a8341f;
+    --alert-soft: rgba(168,52,31,0.10); --go: #1f6b4a; --go-soft: rgba(31,107,74,0.11);
+    --line: rgba(20,24,31,0.13); --line-strong: rgba(20,24,31,0.26);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); }
+  .page {
+    max-width: 960px; margin: 0 auto; padding: 3rem 1.5rem 6rem;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", system-ui, sans-serif;
+    font-size: 1rem; line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono, .num {
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .eyebrow {
+    font-family: ui-monospace, "SF Mono", monospace;
+    font-size: 0.7rem; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink-faint); margin: 0 0 1rem;
+  }
+  h1 {
+    font-size: clamp(2rem, 5vw, 3rem); line-height: 1.06; margin: 0 0 1rem;
+    letter-spacing: -0.025em; text-wrap: balance; font-weight: 700;
+  }
+  .lede { font-size: 1.14rem; color: var(--ink-soft); max-width: 60ch; margin: 0 0 2rem; }
+  h2 {
+    font-size: 1.45rem; margin: 0 0 0.2rem; letter-spacing: -0.015em;
+    text-wrap: balance; font-weight: 650;
+  }
+  h3 {
+    font-family: ui-monospace, "SF Mono", monospace;
+    font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--ink-faint); margin: 1.6rem 0 0.7rem; font-weight: 600;
+  }
+  p { margin: 0 0 0.9rem; }
+  a { color: var(--steel); }
+
+  /* headline callout */
+  .headline-box {
+    border: 1px solid var(--line-strong); border-left: 4px solid var(--alert);
+    border-radius: 4px; background: var(--surface);
+    padding: 1.3rem 1.5rem; margin: 0 0 3rem;
+  }
+  .headline-box .kicker {
+    font-family: ui-monospace, monospace; font-size: 0.68rem; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--alert); font-weight: 700; margin-bottom: 0.5rem;
+  }
+  .headline-box p:last-child { margin-bottom: 0; }
+  .big-compare {
+    display: flex; flex-wrap: wrap; gap: 1.6rem; margin: 1rem 0 0.4rem;
+  }
+  .big-compare div { flex: 1 1 150px; }
+  .big-compare .v {
+    font-family: ui-monospace, monospace; font-size: 1.55rem; font-weight: 700;
+    letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1;
+  }
+  .big-compare .k {
+    font-size: 0.76rem; color: var(--ink-faint); text-transform: uppercase;
+    letter-spacing: 0.07em; margin-top: 0.25rem;
+  }
+
+  /* phases */
+  .phase {
+    border-top: 1px solid var(--line); padding: 1.9rem 0 0.4rem;
+    display: grid; grid-template-columns: 92px 1fr; gap: 1.5rem;
+  }
+  .phase-rail { position: relative; }
+  .phase-id {
+    font-family: ui-monospace, monospace; font-size: 0.72rem; font-weight: 700;
+    letter-spacing: 0.08em; color: var(--steel); background: var(--steel-soft);
+    padding: 0.28rem 0.5rem; border-radius: 3px; display: inline-block;
+  }
+  .phase-when {
+    font-family: ui-monospace, monospace; font-size: 0.7rem; color: var(--ink-faint);
+    margin-top: 0.5rem; line-height: 1.45;
+  }
+  .phase-cost {
+    font-family: ui-monospace, monospace; font-size: 0.76rem; font-weight: 650;
+    color: var(--amber); margin-top: 0.4rem; font-variant-numeric: tabular-nums;
+  }
+  .gate {
+    margin-top: 0.9rem; border: 1px dashed var(--line-strong); border-radius: 4px;
+    padding: 0.7rem 0.9rem; background: var(--go-soft);
+  }
+  .gate .glabel {
+    font-family: ui-monospace, monospace; font-size: 0.66rem; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--go); font-weight: 700; margin-bottom: 0.3rem;
+  }
+  .gate p { margin: 0; font-size: 0.93rem; }
+
+  ul { margin: 0.2rem 0 0.9rem; padding-left: 1.1rem; }
+  li { margin-bottom: 0.35rem; }
+  li::marker { color: var(--ink-faint); }
+
+  .tbl-wrap { overflow-x: auto; margin: 0.6rem 0 1rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; min-width: 480px; }
+  th, td { text-align: left; padding: 0.55rem 0.8rem 0.55rem 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  thead th {
+    font-family: ui-monospace, monospace; font-size: 0.66rem; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--ink-faint); font-weight: 600;
+  }
+  td.r, th.r { text-align: right; font-family: ui-monospace, monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tfoot td { border-bottom: none; border-top: 2px solid var(--line-strong); font-weight: 700; padding-top: 0.7rem; }
+
+  .pill {
+    display: inline-block; font-family: ui-monospace, monospace; font-size: 0.64rem;
+    letter-spacing: 0.06em; text-transform: uppercase; padding: 0.16rem 0.42rem;
+    border-radius: 3px; font-weight: 700;
+  }
+  .pill-legal { background: var(--alert-soft); color: var(--alert); }
+  .pill-money { background: var(--amber-soft); color: var(--amber); }
+  .pill-done { background: var(--go-soft); color: var(--go); }
+
+  .risk {
+    border: 1px solid var(--line); border-radius: 4px; background: var(--surface);
+    padding: 0.9rem 1.1rem; margin-bottom: 0.7rem;
+    border-left: 3px solid var(--alert);
+  }
+  .risk .rtitle { font-weight: 650; margin-bottom: 0.25rem; }
+  .risk .rmit { font-size: 0.89rem; color: var(--ink-soft); }
+  .risk .rmit b { color: var(--ink); }
+
+  .note {
+    font-size: 0.89rem; color: var(--ink-soft); border-left: 2px solid var(--line-strong);
+    padding-left: 0.9rem; margin: 0.9rem 0;
+  }
+  section { margin-top: 3rem; }
+  .section-head { border-bottom: 2px solid var(--ink); padding-bottom: 0.5rem; margin-bottom: 1.4rem; }
+  .section-head h2 { margin: 0; }
+
+  @media (max-width: 620px) {
+    .phase { grid-template-columns: 1fr; gap: 0.7rem; }
+    .phase-rail { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; }
+    .phase-when, .phase-cost { margin-top: 0; }
+  }
+</style>
+
+<div class="page">
+  <p class="eyebrow">Monocular · monochrome · phone-tethered · India</p>
+  <h1>Producing the first batch</h1>
+  <p class="lede">Everything between "the spec is decided" and "100 units exist that can legally be sold." Ordered by dependency, gated by decisions that let you stop cheaply.</p>
+
+  <div class="headline-box">
+    <div class="kicker">Read this before anything else</div>
+    <p><b>₹18,000 is a volume number, not your first-batch number.</b> It assumes production quantities you will not have on day one. At qty 100 you get no volume pricing on the display, and every one-time engineering cost — design, tooling, certification, failed PCB spins — divides across only 100 units instead of thousands.</p>
+    <div class="big-compare">
+      <div><div class="v">₹18k</div><div class="k">BOM at real volume</div></div>
+      <div><div class="v">₹28k</div><div class="k">BOM at qty 100</div></div>
+      <div><div class="v" style="color:var(--alert)">₹36–43k</div><div class="k">True cost per unit, first batch</div></div>
+    </div>
+    <p style="margin-top:0.9rem;">Plan for the gap or the project dies in the middle. Almost every failed hardware startup dies in exactly one place: between a working prototype and a fundable production run.</p>
+  </div>
+
+  <section>
+    <div class="section-head"><h2>The phases</h2></div>
+
+    <div class="phase">
+      <div class="phase-rail">
+        <span class="phase-id">P0</span>
+        <div class="phase-when">Weeks 1–4</div>
+        <div class="phase-cost">₹1.5–2.5L</div>
+      </div>
+      <div>
+        <h2>Prove the display before you believe anything else</h2>
+        <p>Buy <b>one</b> JBD Hummingbird Mini development kit. Not two, not a batch — one. Every downstream decision, cost, and month assumes green monochrome text on a waveguide is genuinely readable for the people this is for. That assumption is unverified and it is cheap to test now and catastrophic to test late.</p>
+        <ul>
+          <li>Contact JBD directly (they are the confirmed supplier behind G1 and RayNeo). Ask for the monochrome dev kit <i>and</i> a price at 100 / 1,000 / 5,000 units in the same email.</li>
+          <li>That quote is the single most important number in this entire plan — it decides whether the ₹18k target is real.</li>
+        </ul>
+        <div class="gate">
+          <div class="glabel">Gate — do not pass without this</div>
+          <p>Can a farm worker read a full sentence of Telugu on it, outdoors, at midday, without shading their eyes? If no: the whole display path is wrong and you have spent ₹2L instead of ₹40L finding out.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-rail">
+        <span class="phase-id">P0.5</span>
+        <div class="phase-when">Weeks 1–6<br>(parallel with P0)</div>
+        <div class="phase-cost">₹40–80k</div>
+      </div>
+      <div>
+        <h2>Legal entity and import rails</h2>
+        <p>Boring, slow, and blocking — start it on day one so it finishes while you prototype.</p>
+        <ul>
+          <li><b>Pvt Ltd</b> (or LLP if staying small) — needed to hold contracts, take grants, invoice.</li>
+          <li><b>IEC (Import Export Code)</b> from DGFT — <span class="pill pill-legal">blocking</span> you legally cannot import the display module without it.</li>
+          <li><b>GST registration</b> — needed to claim input credit on components, which is real money at these volumes.</li>
+          <li>Current account + a customs broker you trust.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-rail">
+        <span class="phase-id">P1</span>
+        <div class="phase-when">Months 2–5</div>
+        <div class="phase-cost">₹4–8L</div>
+      </div>
+      <div>
+        <h2>Integration prototype</h2>
+        <p><span class="pill pill-done">already done</span> The software stack is not a risk on this project. The language pipeline — self-hosted TTS across languages, NLLB translation, Whisper ASR, the forked glasses app — is built and tested. That is genuinely months of de-risked work most hardware projects still have ahead of them.</p>
+        <p>What remains is electrical and mechanical:</p>
+        <ul>
+          <li>Custom PCB — main board plus flex circuits running into the temples.</li>
+          <li>Power: multi-rail PMIC (the display needs three voltages), charging, battery protection.</li>
+          <li>Frame CAD, 3D printed and iterated. Expect ten-plus print revisions before the optics sit right.</li>
+          <li><b>Budget 3–4 full PCB spins.</b> First-spin-works is not a plan, it is luck.</li>
+        </ul>
+        <div class="gate">
+          <div class="glabel">Gate</div>
+          <p>8 hours real battery life · under 35 g · someone wears it through a market and nobody comments on it.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-rail">
+        <span class="phase-id">P2</span>
+        <div class="phase-when">Months 5–7</div>
+        <div class="phase-cost">₹3–5L</div>
+      </div>
+      <div>
+        <h2>EVT — Engineering Validation</h2>
+        <p>5–10 hand-assembled units. Every function works on every unit. This is the first time you build more than one of something, and it is where you discover which assembly steps are impossible with human hands.</p>
+        <ul>
+          <li>Write the assembly procedure as you build. It becomes the factory's instructions later.</li>
+          <li>Time each step. Assembly labour is a real per-unit cost you have not counted yet.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-rail">
+        <span class="phase-id">P3</span>
+        <div class="phase-when">Months 7–10</div>
+        <div class="phase-cost">₹5–8L</div>
+      </div>
+      <div>
+        <h2>DVT — Design Validation</h2>
+        <p>20–30 units, built to the real design. This phase exists to break things on purpose.</p>
+        <ul>
+          <li><b>Optical alignment survival</b> — the highest-risk test on this product. Fold the temples 500 times, then check whether the waveguide image is still aligned. A sealed cartridge is precision-bonded internally, but <i>how you mount it</i> in a flexing plastic frame is your problem, not the supplier's.</li>
+          <li>Drop test, sweat and humidity (this is India — assume monsoon and 40 °C), thermal soak in direct sun.</li>
+          <li>Unit-to-unit consistency: does the display sit in the same spot in someone's vision on all 30?</li>
+          <li>Certification samples are pulled from this build.</li>
+        </ul>
+        <div class="gate">
+          <div class="glabel">Gate</div>
+          <p>30/30 units survive the fold cycle with alignment intact. If not, redesign the optical mount now — after tooling it costs ten times more.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-rail">
+        <span class="phase-id">P4</span>
+        <div class="phase-when">Months 9–12<br>(parallel with P3)</div>
+        <div class="phase-cost">₹3–6L</div>
+      </div>
+      <div>
+        <h2>Certification — the hard legal gate</h2>
+        <p>You cannot legally sell, stock, or import a single unit without these. Start them the day DVT hardware exists.</p>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>What</th><th>Why it applies</th><th class="r">Timeline</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><b>BIS CRS</b> <span class="pill pill-legal">mandatory</span></td>
+                <td>AR/VR/MR and smart glasses are <b>explicitly named</b> in India's Compulsory Registration Scheme. Not a grey area. Per model, per brand.</td>
+                <td class="r">3–5 weeks<br><span style="color:var(--ink-faint)">(domestic mfr)</span></td>
+              </tr>
+              <tr>
+                <td><b>WPC ETA</b> <span class="pill pill-legal">mandatory</span></td>
+                <td>Any BLE radio. RF tested at a NABL-accredited lab. ~₹10,000 government fee plus lab costs. Never expires unless you change the RF hardware.</td>
+                <td class="r">4–6 weeks</td>
+              </tr>
+              <tr>
+                <td><b>EPR (e-waste)</b></td>
+                <td>Producer registration for electronics put on the Indian market.</td>
+                <td class="r">4–6 weeks</td>
+              </tr>
+              <tr>
+                <td>CE / FCC</td>
+                <td>Only if exporting later. Skip for an India-first batch.</td>
+                <td class="r">—</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note"><b>Manufacture in India if you possibly can.</b> BIS CRS for a domestic manufacturer takes 3–5 weeks; for a foreign manufacturer it takes 4–6 months and requires appointing an Authorised Indian Representative. That single choice can cost you half a year.</p>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-rail">
+        <span class="phase-id">P5</span>
+        <div class="phase-when">Months 12–15</div>
+        <div class="phase-cost">₹28–35L</div>
+      </div>
+      <div>
+        <h2>PVT — the first real batch</h2>
+        <p><b>Do not cut steel tooling for 100 units.</b> This is the most expensive mistake available to you right now, and it is the one enthusiastic first-time hardware founders make.</p>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Frame approach</th><th>Up-front</th><th class="r">Per unit @ 100</th><th class="r">Per unit @ 5,000</th></tr></thead>
+            <tbody>
+              <tr><td>SLS 3D print / CNC</td><td>₹0</td><td class="r">₹2,000–3,000</td><td class="r">₹2,000–3,000</td></tr>
+              <tr><td>Injection molds ×3–4<br><span style="color:var(--ink-faint);font-size:0.85em">front, L temple, R temple, hinge parts — eyewear is never one mold</span></td><td>₹12–30L</td><td class="r">₹12,000–30,000<br><span style="color:var(--alert)">+ ₹300 part cost</span></td><td class="r">₹240–600<br><span style="color:var(--go)">+ ₹300 part cost</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Crossover is somewhere around <b>1,500–2,500 units</b>. Below that, printing frames is simply cheaper. Tool up when you have demand proven, not before.</p>
+        <ul>
+          <li>Find an Indian contract manufacturer — Noida, Pune, Chennai, Bengaluru all have consumer-electronics CMs used to this scale.</li>
+          <li>First Article Inspection before they build all 100.</li>
+          <li>QC plan with one non-negotiable station: <b>per-unit optical alignment check</b>. Every single unit, not a sample.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>What the money actually looks like</h2></div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Line</th><th>Type</th><th class="r">Low</th><th class="r">High</th></tr></thead>
+        <tbody>
+          <tr><td>Display dev kit + evaluation</td><td>One-time</td><td class="r">₹1.5L</td><td class="r">₹2.5L</td></tr>
+          <tr><td>Entity, IEC, GST, compliance admin</td><td>One-time</td><td class="r">₹0.4L</td><td class="r">₹0.8L</td></tr>
+          <tr><td>Industrial design + mechanical CAD</td><td>One-time</td><td class="r">₹2L</td><td class="r">₹5L</td></tr>
+          <tr><td>Electronics design + 3–4 PCB spins</td><td>One-time</td><td class="r">₹3L</td><td class="r">₹6L</td></tr>
+          <tr><td>EVT + DVT builds (~35 units)</td><td>One-time</td><td class="r">₹8L</td><td class="r">₹13L</td></tr>
+          <tr><td>BIS CRS + WPC ETA + EPR</td><td>One-time</td><td class="r">₹3L</td><td class="r">₹6L</td></tr>
+          <tr><td>Batch BOM — 100 units @ qty-100 pricing</td><td>Per-unit</td><td class="r">₹26L</td><td class="r">₹30L</td></tr>
+          <tr><td>Assembly labour + QC, 100 units</td><td>Per-unit</td><td class="r">₹1.5L</td><td class="r">₹3L</td></tr>
+          <tr><td>Packaging, charging case, logistics</td><td>Per-unit</td><td class="r">₹1.5L</td><td class="r">₹2.5L</td></tr>
+          <tr><td>Contingency — assume you need it</td><td>—</td><td class="r">₹5L</td><td class="r">₹9L</td></tr>
+        </tbody>
+        <tfoot>
+          <tr><td colspan="2">Total to hold 100 sellable units</td><td class="r">₹52L</td><td class="r">₹78L</td></tr>
+          <tr><td colspan="2" style="font-weight:500;color:var(--ink-soft)">— which is per unit</td><td class="r" style="color:var(--alert)">₹52,000</td><td class="r" style="color:var(--alert)">₹78,000</td></tr>
+        </tfoot>
+      </table>
+    </div>
+    <p class="note">This is higher than the ₹36–43k stated at the top, and the difference is honest: that figure counted batch cost plus light engineering. This table counts <i>everything</i>, including design labour and certification, which is what the money actually has to cover. If you do the design work yourself and unpaid, you land near ₹36–43k. If you pay people properly, you land here. Both numbers are real depending on who is doing the work.</p>
+    <p><b>The second batch is where it gets good.</b> All the one-time cost is already spent. Batch two of 500 units costs roughly the BOM plus assembly — genuinely near ₹20–24k per unit, and it falls from there.</p>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>What actually kills this</h2></div>
+
+    <div class="risk">
+      <div class="rtitle">1 · The display isn't readable enough outdoors</div>
+      <div class="rmit"><b>Kills:</b> the entire product thesis. <b>Mitigation:</b> P0 answers it for ₹2L in week four. This is why P0 is first and alone.</div>
+    </div>
+    <div class="risk">
+      <div class="rtitle">2 · The supplier won't sell you 100 units</div>
+      <div class="rmit">Optical engine makers are geared to OEMs ordering tens of thousands. <b>Mitigation:</b> ask about MOQ in your very first email, before designing anything around a part you cannot buy. Have a second supplier identified.</div>
+    </div>
+    <div class="risk">
+      <div class="rtitle">3 · Optical alignment drifts in a flexing frame</div>
+      <div class="rmit">The cartridge is precision-bonded inside; how you hold it in plastic that bends every time someone folds the temples is entirely your engineering problem. <b>Mitigation:</b> DVT fold-cycle testing, and a metal or composite sub-frame carrying the optics rather than mounting to plastic directly.</div>
+    </div>
+    <div class="risk">
+      <div class="rtitle">4 · Money runs out between DVT and PVT</div>
+      <div class="rmit">The classic hardware death. You have spent ~₹20L, have 30 beautiful working units, and need ₹30L more to make 100 that you can legally sell. <b>Mitigation:</b> raise or pre-sell for the <i>whole</i> path to batch one, not to prototype. Use the 30 DVT units as the demo that raises it.</div>
+    </div>
+    <div class="risk">
+      <div class="rtitle">5 · BIS timeline slips into your launch</div>
+      <div class="rmit"><b>Mitigation:</b> start certification the day DVT units exist, run it fully parallel, and manufacture domestically so you are on the 3–5 week track instead of the 4–6 month one.</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>Funding a first batch that ends up affordable</h2></div>
+    <p>₹52–78L for 100 units cannot come from selling 100 units at ₹18,000. It has to come from somewhere that is not the end user — which is the same conclusion the pricing work reached, arrived at from the other direction.</p>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Source</th><th>Why it fits this specific project</th></tr></thead>
+        <tbody>
+          <tr><td><b>Government pilot order</b></td><td>Sell batch one to a state education or agriculture department as a funded pilot. They have bought free laptops and tablets for students before; this is a known procurement shape. Solves funding <i>and</i> distribution to exactly the users this is for.</td></tr>
+          <tr><td><b>CSR (Companies Act §135)</b></td><td>Large Indian companies are legally required to spend 2% of net profit on CSR, and assistive/education technology qualifies. This is an existing budget line, not a hypothetical grant.</td></tr>
+          <tr><td><b>Grant funding</b></td><td>Assistive-technology and accessibility grants exist specifically for this. The language-access angle is genuinely strong here, not a pitch decoration.</td></tr>
+          <tr><td><b>Pre-orders at the honest price</b></td><td>Urban and institutional buyers pay ~₹30,000; that margin cross-subsidises units for farm workers and students. Requires the DVT units as proof first.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>If you only do one thing this month</h2></div>
+    <p>Email JBD. Ask for the monochrome Hummingbird Mini dev kit, and in the same message ask for pricing at 100, 1,000, and 5,000 units, plus their MOQ.</p>
+    <p>That one reply collapses most of the uncertainty in this entire document — it converts the display cost from a triangulated estimate into a real number, and tells you immediately whether a small first batch is even possible with that supplier. Every other number here is either already grounded or can be adjusted. That one cannot, until they answer.</p>
+  </section>
+</div>

@@ -1,0 +1,724 @@
+// Arka — AI short-form video generation for Indian stories in Japanese anime style.
+//
+// Money conventions (no floats anywhere):
+//   * Revenue        -> `amountMinor` Int, in the currency's minor unit (paise / cents).
+//   * Provider cost  -> `costUsdMicro` Int, USD * 1_000_000. $0.05 => 50_000.
+// Credits are whole integers. One generation costs N credits, set by admin at runtime.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+// Prisma 7: the connection URL lives in `prisma.config.ts` for the CLI and is
+// supplied to the client at runtime through the pg driver adapter.
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Auth (Better Auth core + admin plugin)
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String    @id
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Better Auth admin plugin
+  role       String    @default("user") // "user" | "admin"
+  banned     Boolean   @default(false)
+  banReason  String?
+  banExpires DateTime?
+
+  // Arka profile
+  country String @default("IN")
+  locale  String @default("en")
+
+  // Credit balances. `credits` is spendable; `creditsHeld` is reserved by
+  // in-flight jobs. Both are maintained transactionally alongside CreditLedger.
+  credits     Int @default(0)
+  creditsHeld Int @default(0)
+
+  // Set the moment the welcome credits are handed out, and used as the guard
+  // that hands them out exactly once. Signup no longer grants them — a verified
+  // email does — and a verification link can be opened more than once.
+  signupGrantedAt DateTime?
+
+  // Denormalised plan pointer; the authoritative record is Subscription.
+  planCode String @default("free")
+
+  sessions      Session[]
+  accounts      Account[]
+  projects      Project[]
+  ledger        CreditLedger[]
+  transactions  Transaction[]
+  subscriptions Subscription[]
+  apiKeys       ApiKey[]
+  feedback      Feedback[]
+  generations   Generation[]
+  reviewItems   ReviewItem[]
+  auditEntries  AuditLog[]     @relation("AuditActor")
+
+  @@index([createdAt])
+  @@index([planCode])
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  impersonatedBy String?
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+/// Rate limit counters, owned and pruned by Better Auth.
+///
+/// Kept in Postgres rather than process memory so the limit is shared across
+/// serverless instances and survives a cold start. `lastRequest` is epoch
+/// milliseconds, not a timestamp — that is the shape Better Auth reads.
+model RateLimit {
+  id          String @id @default(cuid())
+  key         String @unique
+  count       Int
+  lastRequest BigInt
+
+  @@index([lastRequest])
+  @@map("rate_limit")
+}
+
+/// Fixed-window rate limit counters for Arka's own endpoints.
+///
+/// Deliberately not the `rate_limit` table above: Better Auth owns that one and
+/// prunes it on its own schedule, so sharing it would mean our limits vanish
+/// whenever it decides to tidy up. Same storage argument applies though — a
+/// per-process counter on a serverless host is the limit multiplied by the
+/// instance count, which is no limit at all.
+model ApiRateLimit {
+  key         String   @id
+  count       Int
+  windowStart DateTime
+
+  @@index([windowStart])
+  @@map("api_rate_limit")
+}
+
+// ---------------------------------------------------------------------------
+// Projects & videos
+// ---------------------------------------------------------------------------
+
+enum ProjectStatus {
+  DRAFT
+  QUEUED
+  RUNNING
+  /** Still rendered and waiting for the user to approve or re-roll it. */
+  STILL_READY
+  READY
+  FAILED
+  CANCELLED
+}
+
+enum RenderTier {
+  /// Stage one: a single frame. Costs roughly a hundredth of a motion render,
+  /// which is the entire reason the two-stage pipeline exists — so the margin
+  /// table has to be able to tell them apart.
+  STILL
+  PREVIEW // cheap, low-res, what every generation produces first
+  FINAL // full quality, only on explicit user request
+}
+
+model Project {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title  String
+  prompt String @db.Text
+
+  // What the narrator says. Separate from `prompt`, which describes what the
+  // camera sees — reading a shot description aloud is not narration. Falls
+  // back to the prompt when a voice is selected and this is empty.
+  script String? @db.Text
+
+  // Catalog-driven values validated in `src/lib/catalog.ts` rather than DB
+  // enums, so new styles/languages/voices ship without a migration.
+  style       String
+  // Where the story is set. Drives the cultural lexicon that replaces generic
+  // nouns before the prompt ever reaches a model — see `settings-catalog.ts`.
+  setting     String @default("dravidian")
+  language    String @default("en")
+  voiceId     String @default("none")
+  aspectRatio String @default("9:16")
+  durationSec Int    @default(5)
+
+  // The approved still, which becomes the first frame of the motion render.
+  // Generating this costs cents; motion costs dollars, so nothing advances
+  // past it without the user explicitly saying so.
+  stillKey        String?
+  stillApprovedAt DateTime?
+
+  status       ProjectStatus @default(DRAFT)
+  errorMessage String?
+  progress     Int           @default(0) // 0-100, surfaced to the UI
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  videos      Video[]
+  jobs        Job[]
+  generations Generation[]
+  reviewItems ReviewItem[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("project")
+}
+
+enum VideoStatus {
+  PENDING
+  UPLOADING
+  READY
+  FAILED
+}
+
+model Video {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  tier   RenderTier  @default(PREVIEW)
+  status VideoStatus @default(PENDING)
+
+  // Object storage (Cloudflare R2). Keys, never public URLs — access is
+  // always through a short-lived signed URL.
+  storageKey   String?
+  thumbnailKey String?
+  sizeBytes    Int?
+
+  // Narration, kept as its own object as well as muxed into the video. Playing
+  // it as a separate track is the fallback when the render is not a container
+  // ffmpeg can mux into.
+  audioKey       String?
+  audioMuxed     Boolean @default(false)
+  audioDurationSec Int?
+
+  width       Int?
+  height      Int?
+  durationSec Int?
+  hasAudio    Boolean @default(false)
+
+  providerName String?
+  providerJobId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId, tier])
+  @@map("video")
+}
+
+// ---------------------------------------------------------------------------
+// Job queue — Postgres-backed, claimed with FOR UPDATE SKIP LOCKED.
+// ---------------------------------------------------------------------------
+
+enum JobType {
+  /** Stage one: the anime still. Cheap, and iterated on before any video. */
+  GENERATE_STILL
+  GENERATE_PREVIEW
+  GENERATE_FINAL
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  DEFERRED // held back by the daily spend cap
+}
+
+model Job {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  type   JobType
+  status JobStatus @default(QUEUED)
+
+  priority    Int      @default(0) // higher runs first
+  attempts    Int      @default(0)
+  maxAttempts Int      @default(3)
+  runAfter    DateTime @default(now()) // backoff / deferral gate
+
+  // Worker lease. A row is claimed by setting these; a lease older than
+  // LEASE_TIMEOUT is reclaimable, which is how we survive a crashed worker.
+  lockedBy      String?
+  lockedAt      DateTime?
+  heartbeatAt   DateTime?
+  timeoutSec    Int       @default(600)
+
+  // Credits reserved when the job was enqueued; refunded on terminal failure.
+  creditsHeld Int @default(0)
+
+  // Set once the job has been handed to a provider. The worker runs as a step
+  // function — each tick either dispatches or polls — so this has to survive
+  // between ticks rather than living in worker memory.
+  providerName          String?
+  providerJobId         String?
+  estimatedCostUsdMicro Int     @default(0)
+  dispatchedAt          DateTime?
+
+  // Set by the caller so a double-submit cannot create two jobs.
+  idempotencyKey String? @unique
+
+  payload   Json?
+  lastError String? @db.Text
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  @@index([status, runAfter, priority(sort: Desc)])
+  @@index([projectId])
+  @@map("job")
+}
+
+// ---------------------------------------------------------------------------
+// Cost tracking — one row per provider call. This is the profitability table.
+// ---------------------------------------------------------------------------
+
+model Generation {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  provider String // "fal" | "mock" | ...
+  model    String
+  tier     RenderTier @default(PREVIEW)
+
+  // What we charged vs what it actually cost us.
+  creditsCharged Int @default(0)
+  costUsdMicro   Int @default(0)
+
+  // Unit-economics inputs.
+  durationSec Int?
+  width       Int?
+  height      Int?
+  latencyMs   Int?
+
+  success   Boolean @default(false)
+  errorCode String?
+  errorText String? @db.Text
+
+  // Set when the output was served from the result cache instead of the
+  // provider — cache hits cost us nothing.
+  cacheHit Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([provider, createdAt])
+  @@index([userId, createdAt])
+  @@index([success])
+  @@map("generation")
+}
+
+// Result cache: identical (prompt, style, duration, aspect, tier) reuses the
+// rendered asset instead of paying a provider again.
+model RenderCache {
+  id           String   @id @default(cuid())
+  paramsHash   String   @unique
+  storageKey   String
+  thumbnailKey String?
+  audioKey     String?
+  audioMuxed   Boolean  @default(false)
+  width        Int?
+  height       Int?
+  durationSec  Int?
+  sizeBytes    Int?
+  provider     String
+  model        String
+  hits         Int      @default(0)
+  createdAt    DateTime @default(now())
+  lastUsedAt   DateTime @default(now())
+
+  @@index([lastUsedAt])
+  @@map("render_cache")
+}
+
+model ProviderHealth {
+  name                String    @id
+  healthy             Boolean   @default(true)
+  consecutiveFailures Int       @default(0)
+  disabledUntil       DateTime?
+  lastCheckedAt       DateTime  @default(now())
+  lastError           String?
+
+  @@map("provider_health")
+}
+
+// ---------------------------------------------------------------------------
+// Credits & money
+// ---------------------------------------------------------------------------
+
+enum LedgerReason {
+  SIGNUP_GRANT
+  PLAN_RENEWAL
+  PACK_PURCHASE
+  GENERATION_HOLD
+  GENERATION_REFUND
+  ADMIN_GRANT
+  ADMIN_DEDUCT
+  PROMO
+  /// Credits taken back because the money for them was returned. Distinct from
+  /// ADMIN_DEDUCT so a refund is never mistaken for a punitive correction, and
+  /// so the two can be reconciled against `transaction` separately.
+  PURCHASE_REVERSAL
+}
+
+// Append-only. Sum of `delta` for a user must always equal User.credits.
+model CreditLedger {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  delta        Int
+  balanceAfter Int
+  reason       LedgerReason
+
+  // Loose pointer to what caused the movement (job id, transaction id, ...).
+  refType String?
+  refId   String?
+
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([refType, refId])
+  @@map("credit_ledger")
+}
+
+enum TransactionStatus {
+  CREATED
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum TransactionPurpose {
+  CREDIT_PACK
+  SUBSCRIPTION
+}
+
+model Transaction {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  provider   String // "razorpay" | "stripe"
+  purpose    TransactionPurpose
+  status     TransactionStatus  @default(CREATED)
+
+  // Minor units: paise for INR, cents for USD.
+  amountMinor Int
+  currency    String @default("INR")
+
+  creditsGranted Int    @default(0)
+  planCode       String?
+
+  providerOrderId   String? @unique
+  providerPaymentId String? @unique
+  providerRefundId  String?
+
+  // Guards against a webhook being delivered more than once.
+  fulfilledAt DateTime?
+
+  // Refund. `refundedAt` is the idempotency key, exactly as `fulfilledAt` is
+  // for the payment: the guarded claim on it is what stops a retried refund
+  // returning the money twice.
+  refundedAt        DateTime?
+  refundAmountMinor Int?
+  /// Credits actually taken back, which is not always what was granted — a
+  /// customer may have spent some before asking. Recorded so the gap between
+  /// money returned and value returned is visible rather than inferred.
+  creditsReversed   Int?
+  refundReason      String?
+
+  /// Sequential per financial year, e.g. "ARKA/2026-27/0001". Assigned when
+  /// the payment is fulfilled, never reused, never reassigned — GST requires a
+  /// gapless series and an invoice number that changes is not one.
+  invoiceNumber String?   @unique
+  invoicedAt    DateTime?
+
+  invoiceUrl String?
+  meta       Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status, createdAt])
+  @@map("transaction")
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+  PENDING
+}
+
+model Subscription {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  planCode String
+  provider String             @default("razorpay")
+  status   SubscriptionStatus @default(PENDING)
+
+  providerSubId String? @unique
+
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  cancelAtPeriodEnd  Boolean   @default(false)
+  cancelledAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status, currentPeriodEnd])
+  @@map("subscription")
+}
+
+// Plans live in the DB so pricing and credit grants are editable by an admin
+// without a deploy. Seeded from `src/lib/plans.ts`.
+model Plan {
+  code           String  @id
+  name           String
+  description    String?
+  priceMinorInr  Int     @default(0)
+  priceMinorUsd  Int     @default(0)
+  monthlyCredits Int     @default(0)
+  maxConcurrent  Int     @default(1)
+  maxDurationSec Int     @default(5)
+  allowFinal     Boolean @default(false) // access to full-quality renders
+  sortOrder      Int     @default(0)
+  active         Boolean @default(true)
+
+  // Razorpay (or Stripe) plan id, created in the provider's dashboard.
+  // Null means this tier cannot be subscribed to yet; the pricing page says so
+  // rather than opening a checkout that would fail.
+  providerPlanId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("plan")
+}
+
+// ---------------------------------------------------------------------------
+// Platform
+// ---------------------------------------------------------------------------
+
+model ApiKey {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name       String
+  prefix     String // first 8 chars, shown in the UI
+  hashedKey  String @unique // sha256 of the full key; the key itself is never stored
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@map("api_key")
+}
+
+// Runtime-tunable configuration: credit costs, daily spend cap, kill switches.
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  @@map("app_setting")
+}
+
+/// Somebody who asked to be told when Arka opens.
+///
+/// The only reason a holding page is worth putting up at all. Traffic that
+/// arrives before launch and leaves no address is traffic spent for nothing.
+model WaitlistEntry {
+  id    String @id @default(cuid())
+  email String @unique
+
+  /// Where they came from, when a campaign appends ?ref=. Never a full URL —
+  /// that can carry anything a link was decorated with.
+  source String?
+
+  /// Set when the launch announcement actually goes out, so a second send
+  /// cannot mail the same person twice.
+  notifiedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("waitlist_entry")
+}
+
+/// Content flagged for a person to look at.
+///
+/// The moderation filter has two outcomes — allow or refuse — and that is a
+/// gap. Plenty of prompts are neither clearly fine nor clearly forbidden,
+/// especially on a product whose subject is religion, and a binary filter
+/// resolves every one of them by guessing. This is the third outcome: it
+/// renders, and a human sees it afterwards.
+model ReviewItem {
+  id        String @id @default(cuid())
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  /// Which heuristic raised it, e.g. "religion.sensitive".
+  reason String
+  /// What the user wrote. Retained only until the item is resolved.
+  excerpt String @db.Text
+
+  status     ReviewStatus @default(PENDING)
+  resolvedBy String?
+  resolvedAt DateTime?
+  note       String?
+
+  createdAt DateTime @default(now())
+
+  @@index([status, createdAt])
+  @@index([userId])
+  @@map("review_item")
+}
+
+enum ReviewStatus {
+  PENDING
+  /// Looked at, nothing wrong. The render stands.
+  CLEARED
+  /// Taken down. The project is deleted and the user told.
+  REMOVED
+}
+
+model Feedback {
+  id     String  @id @default(cuid())
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  rating  Int? // 1-5, optional
+  message String  @db.Text
+  page    String?
+  meta    Json?
+
+  resolved  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt(sort: Desc)])
+  @@map("feedback")
+}
+
+model AuditLog {
+  id      String  @id @default(cuid())
+  actorId String?
+  actor   User?   @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  action     String // "user.ban", "credits.refund", ...
+  targetType String?
+  targetId   String?
+  meta       Json?
+  ip         String?
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt(sort: Desc)])
+  @@index([action])
+  @@map("audit_log")
+}
+
+// Structured application log for anything worth keeping after the request ends
+// (provider errors, webhook failures, queue incidents).
+model SystemLog {
+  id        String   @id @default(cuid())
+  level     String   @default("info") // info | warn | error
+  scope     String // "queue" | "provider.fal" | "webhook.razorpay"
+  message   String   @db.Text
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt(sort: Desc)])
+  @@index([level, createdAt(sort: Desc)])
+  @@map("system_log")
+}
+
+// Rolling per-day spend counter, used by the budget guard. One row per UTC day.
+model DailySpend {
+  day          DateTime @id @db.Date
+  costUsdMicro Int      @default(0)
+  generations  Int      @default(0)
+  updatedAt    DateTime @updatedAt
+
+  @@map("daily_spend")
+}

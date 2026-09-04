@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/match/find",
+      "schedule": "30 14 * * 5"
+    }
+  ]
+}

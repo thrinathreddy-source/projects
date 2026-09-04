@@ -1,0 +1,358 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-display: var(--font-display);
+  --font-heading: var(--font-display);
+  --font-devanagari: var(--font-devanagari);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+
+  /* The press palette. Four inks, addressable directly. */
+  --color-ink: var(--ink);
+  --color-bone: var(--bone);
+  --color-vermilion: var(--vermilion);
+  --color-cyan: var(--cyan);
+  --color-saffron: var(--saffron);
+
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.5);
+  --radius-2xl: calc(var(--radius) * 2);
+  --radius-3xl: calc(var(--radius) * 3);
+  --radius-4xl: calc(var(--radius) * 4);
+}
+
+/*
+ * Arka is printed, not rendered.
+ *
+ * The whole visual system is a two-colour risograph poster: a near-black ink
+ * ground, hot vermilion, electric cyan, and a bone paper stock for the light
+ * sections. Everything else — halftone, grain, misregistration, scan lines —
+ * is the texture of a press run, faked in CSS so it costs nothing to ship.
+ *
+ * Corners are square. Posters do not have rounded corners.
+ */
+:root {
+  --ink: oklch(0.125 0.01 40);
+  --bone: oklch(0.935 0.022 85);
+  --vermilion: oklch(0.635 0.225 33);
+  --cyan: oklch(0.79 0.145 202);
+  --saffron: oklch(0.79 0.16 66);
+
+  --background: var(--ink);
+  --foreground: oklch(0.95 0.015 80);
+  --card: oklch(0.165 0.012 40);
+  --card-foreground: oklch(0.95 0.015 80);
+  --popover: oklch(0.175 0.013 40);
+  --popover-foreground: oklch(0.95 0.015 80);
+
+  --primary: var(--vermilion);
+  --primary-foreground: oklch(0.97 0.01 80);
+  --secondary: oklch(0.24 0.016 40);
+  --secondary-foreground: oklch(0.95 0.015 80);
+  --muted: oklch(0.22 0.014 40);
+  --muted-foreground: oklch(0.70 0.02 65);
+  --accent: oklch(0.27 0.02 42);
+  --accent-foreground: oklch(0.96 0.015 80);
+
+  --destructive: oklch(0.635 0.225 33);
+  --success: oklch(0.75 0.15 160);
+  --warning: var(--saffron);
+
+  --border: oklch(0.98 0.02 70 / 13%);
+  --input: oklch(0.98 0.02 70 / 17%);
+  --ring: var(--vermilion);
+
+  --chart-1: var(--vermilion);
+  --chart-2: var(--cyan);
+  --chart-3: var(--saffron);
+  --chart-4: oklch(0.72 0.15 160);
+  --chart-5: oklch(0.70 0.16 350);
+
+  /* Near-square. Just enough to not look like an accident. */
+  --radius: 0.125rem;
+
+  --sidebar: oklch(0.145 0.011 40);
+  --sidebar-foreground: oklch(0.95 0.015 80);
+  --sidebar-primary: var(--vermilion);
+  --sidebar-primary-foreground: oklch(0.97 0.01 80);
+  --sidebar-accent: oklch(0.25 0.018 42);
+  --sidebar-accent-foreground: oklch(0.96 0.015 80);
+  --sidebar-border: oklch(0.98 0.02 70 / 13%);
+  --sidebar-ring: var(--vermilion);
+}
+
+.dark {
+  color-scheme: dark;
+}
+
+/* Bone paper stock. Drop this on a section and everything inside re-inks. */
+.stock-bone {
+  --background: var(--bone);
+  --foreground: oklch(0.17 0.015 40);
+  --card: oklch(0.965 0.015 85);
+  --card-foreground: oklch(0.17 0.015 40);
+  --popover: oklch(0.965 0.015 85);
+  --popover-foreground: oklch(0.17 0.015 40);
+  --muted: oklch(0.885 0.025 85);
+  --muted-foreground: oklch(0.42 0.03 50);
+  --accent: oklch(0.885 0.025 85);
+  --accent-foreground: oklch(0.17 0.015 40);
+  --secondary: oklch(0.885 0.025 85);
+  --secondary-foreground: oklch(0.17 0.015 40);
+  --border: oklch(0.17 0.015 40 / 20%);
+  --input: oklch(0.17 0.015 40 / 25%);
+  --primary-foreground: oklch(0.97 0.01 80);
+
+  background-color: var(--bone);
+  color: var(--foreground);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
+  }
+  html {
+    @apply font-sans;
+  }
+
+  ::selection {
+    background: var(--vermilion);
+    color: oklch(0.97 0.01 80);
+  }
+
+  /* One face per script, because a font only contains the script it was drawn
+     for. Every one of these languages used to point at Noto Sans Devanagari —
+     which holds no Tamil, Telugu, Kannada, Malayalam, Bangla, Gujarati or
+     Gurmukhi glyph at all, so seven of the twelve languages in the picker were
+     silently falling back to whatever the operating system had lying around. */
+  :lang(hi), :lang(mr), .indic {
+    font-family: var(--font-devanagari), var(--font-sans), sans-serif;
+  }
+  :lang(ta) { font-family: var(--font-tamil), var(--font-sans), sans-serif; }
+  :lang(te) { font-family: var(--font-telugu), var(--font-sans), sans-serif; }
+  :lang(kn) { font-family: var(--font-kannada), var(--font-sans), sans-serif; }
+  :lang(ml) { font-family: var(--font-malayalam), var(--font-sans), sans-serif; }
+  :lang(bn) { font-family: var(--font-bangla), var(--font-sans), sans-serif; }
+  :lang(gu) { font-family: var(--font-gujarati), var(--font-sans), sans-serif; }
+  :lang(pa) { font-family: var(--font-gurmukhi), var(--font-sans), sans-serif; }
+  :lang(ur) { font-family: var(--font-arabic), var(--font-sans), sans-serif; }
+  :lang(ja) { font-family: var(--font-japanese), var(--font-sans), sans-serif; }
+}
+
+@layer utilities {
+  /* --- Type ------------------------------------------------------------- */
+
+  /* The poster voice: ultra-condensed, tight, all caps, set enormous and
+     allowed to run off the edge of the page. */
+  .poster {
+    font-family: var(--font-display), Impact, sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    line-height: 0.82;
+    letter-spacing: -0.01em;
+  }
+
+  /* Page titles everywhere that is not the landing plate.
+     Same condensed face as .poster, but set for one short line rather than a
+     word running off the edge — looser leading, a touch of tracking so caps do
+     not jam together at small sizes. Without this, every page past the home
+     page introduced itself in a neutral grotesque and read like a different
+     product. */
+  .page-title {
+    font-family: var(--font-display), Impact, sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    line-height: 0.92;
+    letter-spacing: 0.005em;
+  }
+
+  /* The same face for a string we did not write.
+     A user's project title has to survive being displayed, and forcing
+     "my first draft" into caps shouts something the user did not. Condensed
+     and heavy keeps it in the family; sentence case keeps it theirs. */
+  .title-soft {
+    font-family: var(--font-display), Impact, sans-serif;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.01em;
+  }
+
+  /* Section headings inside a page.
+     These were all `text-sm font-medium` — invisible as structure and mute as
+     voice. The annotation treatment is already this product's vocabulary for
+     labelling a thing, and a spec-sheet label above a data table is exactly
+     what most of these are. */
+  .section-label {
+    font-family: var(--font-mono), monospace;
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+
+  /* Small technical annotation, the way a spec sheet or a plate margin reads. */
+  .annotation {
+    font-family: var(--font-mono), monospace;
+    font-size: 0.6875rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  /* --- Press texture ----------------------------------------------------- */
+
+  /* Halftone: the dot screen a duotone is separated into. */
+  .halftone::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: radial-gradient(
+      circle at center,
+      currentColor 0.9px,
+      transparent 1px
+    );
+    background-size: 4px 4px;
+    opacity: 0.16;
+    mix-blend-mode: multiply;
+  }
+
+  /* Paper grain, via a turbulence filter baked into a data URI. */
+  .grain::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.32;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  }
+
+  /* Scan lines, as on the Dhananjaya plate. */
+  .scanlines::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: repeating-linear-gradient(
+      0deg,
+      oklch(0 0 0 / 22%) 0 1px,
+      transparent 1px 3px
+    );
+  }
+
+  /* Misregistration — the plate that did not quite line up. Applied to type. */
+  .misreg {
+    text-shadow:
+      0.055em 0 0 var(--cyan),
+      -0.03em 0 0 var(--vermilion);
+  }
+
+  /* Outline type, as on the MAHA BHARAT plate.
+     `-webkit-text-fill-color` rather than `color: transparent`: the latter
+     also zeroes `currentColor`, which leaves the stroke invisible too. */
+  .outline-type {
+    -webkit-text-fill-color: transparent;
+    -webkit-text-stroke: 2px currentColor;
+    paint-order: stroke fill;
+  }
+
+  /* The ghost plate. Fading the fill alone leaves the misregistration
+     shadows at full strength, which reads as solid type rather than a
+     watermark — so the whole element is faded together. */
+  .ghost-plate {
+    opacity: 0.085;
+  }
+
+  /* --- Grounds ----------------------------------------------------------- */
+
+  .bg-kolam {
+    background-image: radial-gradient(
+      circle at center,
+      currentColor 1.2px,
+      transparent 1.3px
+    );
+    background-size: 26px 26px;
+    opacity: 0.14;
+  }
+
+  .bg-grid-plate {
+    background-image:
+      linear-gradient(to right, currentColor 1px, transparent 1px),
+      linear-gradient(to bottom, currentColor 1px, transparent 1px);
+    background-size: 44px 44px;
+  }
+
+  /* --- Motion. One primitive, used sparingly. ---------------------------- */
+  @keyframes arka-flicker {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 1; }
+  }
+  .animate-flicker {
+    animation: arka-flicker 2.4s steps(2, end) infinite;
+  }
+
+  @keyframes arka-rise {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: none; }
+  }
+  .animate-rise {
+    animation: arka-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .masonry {
+    column-gap: 0;
+  }
+  .masonry > * {
+    break-inside: avoid;
+  }
+  @media (min-width: 768px) {
+    .masonry { columns: 2; }
+  }
+  @media (min-width: 1280px) {
+    .masonry { columns: 3; }
+  }
+}

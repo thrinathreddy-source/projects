@@ -1,0 +1,33 @@
+name: Repo keepalive (prevents cron auto-disable)
+
+# GitHub automatically disables scheduled workflows on a public repo after
+# 60 days with no repository activity (commits/pushes) — see
+# https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#schedule.
+# scrape-cron.yml and scrape-resources-cron.yml run more often than once a
+# day, so they can't move to Vercel's own cron (Hobby plan caps cron jobs
+# at once/day — see vercel.json and its sibling cron routes, which did
+# move). This workflow's only job is to make one trivial, real commit well
+# within any 60-day window so those two — and this one — never go dark
+# from inactivity, without anyone needing to remember to check in.
+on:
+  schedule:
+    - cron: '0 4 1 * *' # 04:00 UTC on the 1st of every month — comfortably under 60 days
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Touch a timestamp file and commit
+        run: |
+          mkdir -p .github
+          echo "Last keepalive run: $(date -u +"%Y-%m-%dT%H:%M:%SZ")" > .github/KEEPALIVE.md
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/KEEPALIVE.md
+          git commit -m "chore: keepalive $(date -u +%Y-%m-%d)" || exit 0
+          git push

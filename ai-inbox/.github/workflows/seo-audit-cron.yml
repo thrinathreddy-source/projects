@@ -1,0 +1,15 @@
+name: Weekly SEO health audit
+
+on:
+  schedule:
+    - cron: '0 4 * * 1'
+  workflow_dispatch: {}
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger weekly SEO audit
+        run: |
+          curl -sf -X GET "https://www.oppidx.com/api/cron/seo-audit" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"

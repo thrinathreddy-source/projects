@@ -1,0 +1,21 @@
+node_modules/
+.next/
+.vercel/
+.expo/
+__pycache__/
+.pytest_cache/
+*.log
+.DS_Store
+
+# secrets — never commit real env files, only .env.example/.env.template
+.env
+.env.local
+.env.*.local
+.env.production.secrets
+
+.pgdata/
+.storage/
+.preview/
+.claude/
+piper-venv/
+piper-voices/

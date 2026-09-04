@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-test-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - run: npm ci
+
+      # Not a blocking gate yet: the codebase currently has ~104 pre-existing
+      # lint errors unrelated to any single change, so a hard failure here
+      # would red-X every PR regardless of what it touches. Surfaces the
+      # count without blocking merges until that backlog is worked down.
+      - run: npm run lint
+        continue-on-error: true
+
+      - run: npm test
+
+      # Some routes (/collections/[slug], /companies/[slug]) query the
+      # database at build time via generateStaticParams, so this needs the
+      # same DB secrets as production. Add TURSO_DATABASE_URL and
+      # TURSO_AUTH_TOKEN under Settings > Secrets and variables > Actions
+      # for this step to pass — same pattern as CRON_SECRET in
+      # scrape-cron.yml. DATABASE_URL only needs to be non-empty; the
+      # Turso adapter (lib/db.ts) takes over the actual connection once
+      # TURSO_DATABASE_URL is set.
+      - run: npm run build
+        env:
+          # Only needs to be non-empty to satisfy Prisma schema validation —
+          # the Turso adapter below takes over the real connection.
+          DATABASE_URL: 'file:./ci-placeholder.db'
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}

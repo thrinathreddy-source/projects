@@ -1,0 +1,640 @@
+<title>Two Open Paths: Voice &amp; Lens Devices</title>
+<style>
+  :root {
+    --paper: #eeefe7;
+    --paper-2: #e4e6da;
+    --ink: #1e2620;
+    --ink-soft: #4c5850;
+    --trace: #2d5c7a;
+    --trace-soft: rgba(45,92,122,0.12);
+    --ochre: #a8690d;
+    --ochre-soft: rgba(168,105,13,0.12);
+    --solder: #386651;
+    --solder-soft: rgba(56,102,81,0.12);
+    --line: rgba(30,38,32,0.16);
+    --card-border: rgba(30,38,32,0.20);
+    --shadow: rgba(30,38,32,0.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #121712;
+      --paper-2: #192019;
+      --ink: #e8ece6;
+      --ink-soft: #a7b3a9;
+      --trace: #7cb2d4;
+      --trace-soft: rgba(124,178,212,0.14);
+      --ochre: #e0a13f;
+      --ochre-soft: rgba(224,161,63,0.14);
+      --solder: #6fbb96;
+      --solder-soft: rgba(111,187,150,0.14);
+      --line: rgba(232,236,230,0.14);
+      --card-border: rgba(232,236,230,0.20);
+      --shadow: rgba(0,0,0,0.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #121712;
+    --paper-2: #192019;
+    --ink: #e8ece6;
+    --ink-soft: #a7b3a9;
+    --trace: #7cb2d4;
+    --trace-soft: rgba(124,178,212,0.14);
+    --ochre: #e0a13f;
+    --ochre-soft: rgba(224,161,63,0.14);
+    --solder: #6fbb96;
+    --solder-soft: rgba(111,187,150,0.14);
+    --line: rgba(232,236,230,0.14);
+    --card-border: rgba(232,236,230,0.20);
+    --shadow: rgba(0,0,0,0.35);
+  }
+  :root[data-theme="light"] {
+    --paper: #eeefe7;
+    --paper-2: #e4e6da;
+    --ink: #1e2620;
+    --ink-soft: #4c5850;
+    --trace: #2d5c7a;
+    --trace-soft: rgba(45,92,122,0.12);
+    --ochre: #a8690d;
+    --ochre-soft: rgba(168,105,13,0.12);
+    --solder: #386651;
+    --solder-soft: rgba(56,102,81,0.12);
+    --line: rgba(30,38,32,0.16);
+    --card-border: rgba(30,38,32,0.20);
+    --shadow: rgba(30,38,32,0.08);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+  }
+  .page {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 5rem;
+    font-family: 'Iowan Old Style', 'Palatino Linotype', 'Noto Serif', Georgia, serif;
+    font-size: 1.05rem;
+    line-height: 1.6;
+  }
+  .mono {
+    font-family: ui-monospace, 'SF Mono', 'Cascadia Code', 'Roboto Mono', 'Noto Sans Mono', monospace;
+  }
+  .eyebrow {
+    font-family: ui-monospace, 'SF Mono', 'Cascadia Code', 'Roboto Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin: 0 0 0.9rem;
+  }
+  h1 {
+    font-size: clamp(1.9rem, 4vw, 2.6rem);
+    line-height: 1.12;
+    margin: 0 0 1rem;
+    text-wrap: balance;
+    letter-spacing: -0.01em;
+  }
+  .lede {
+    max-width: 62ch;
+    color: var(--ink-soft);
+    font-size: 1.1rem;
+    margin: 0 0 2.5rem;
+  }
+  h2 {
+    font-size: 1.5rem;
+    margin: 0 0 0.3rem;
+    text-wrap: balance;
+  }
+  h3 {
+    font-family: ui-monospace, 'SF Mono', 'Cascadia Code', 'Roboto Mono', monospace;
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin: 1.8rem 0 0.8rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--line);
+  }
+  p { margin: 0 0 1rem; }
+
+  /* ---- compare strip ---- */
+  .compare-wrap {
+    overflow-x: auto;
+    margin-bottom: 3.2rem;
+    border: 1px solid var(--card-border);
+    border-radius: 6px;
+  }
+  table.compare {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.92rem;
+    min-width: 560px;
+  }
+  table.compare th, table.compare td {
+    text-align: left;
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  table.compare thead th {
+    font-family: ui-monospace, 'SF Mono', 'Cascadia Code', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    background: var(--paper-2);
+  }
+  table.compare th:first-child, table.compare td:first-child {
+    color: var(--ink-soft);
+    font-family: ui-monospace, monospace;
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+  table.compare tbody tr:last-child td { border-bottom: none; }
+  td.voice-col { border-left: 3px solid var(--trace); }
+  td.lens-col { border-left: 3px solid var(--ochre); }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ---- build sections ---- */
+  .build {
+    padding: 2.2rem 0 1rem;
+    border-top: 1px solid var(--line);
+  }
+  .build-head { display: flex; align-items: baseline; gap: 0.7rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
+  .tag {
+    font-family: ui-monospace, monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.22rem 0.5rem;
+    border-radius: 3px;
+    font-weight: 600;
+  }
+  .tag-voice { background: var(--trace-soft); color: var(--trace); }
+  .tag-lens { background: var(--ochre-soft); color: var(--ochre); }
+  .who { color: var(--ink-soft); font-size: 0.95rem; margin-top: -0.4rem; }
+
+  .bom-wrap { overflow-x: auto; }
+  table.bom { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+  table.bom th, table.bom td { text-align: left; padding: 0.5rem 0.8rem 0.5rem 0; border-bottom: 1px solid var(--line); }
+  table.bom thead th {
+    font-family: ui-monospace, monospace; font-size: 0.68rem; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--ink-soft); font-weight: 500;
+  }
+  table.bom td.cost { text-align: right; font-family: ui-monospace, monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  table.bom th.cost { text-align: right; }
+  .bom-total {
+    font-family: ui-monospace, monospace;
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    margin-top: 0.8rem;
+    padding-top: 0.6rem;
+    border-top: 1px dashed var(--line);
+  }
+  .bom-total b { color: var(--ink); }
+
+  /* ---- flow diagram ---- */
+  .flow-wrap { overflow-x: auto; padding-bottom: 0.3rem; }
+  .flow {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    min-width: max-content;
+    font-family: ui-monospace, monospace;
+    font-size: 0.78rem;
+  }
+  .flow-stage {
+    border: 1px solid var(--card-border);
+    border-radius: 5px;
+    padding: 0.55rem 0.8rem;
+    background: var(--paper-2);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 108px;
+    text-align: center;
+  }
+  .flow-stage .label { color: var(--ink); font-weight: 600; }
+  .flow-stage .sub { color: var(--ink-soft); font-size: 0.7rem; margin-top: 0.2rem; }
+  .flow-arrow {
+    display: flex;
+    align-items: center;
+    padding: 0 0.5rem;
+    color: var(--ink-soft);
+  }
+  .flow-note {
+    font-family: 'Iowan Old Style', 'Noto Serif', Georgia, serif;
+    font-size: 0.9rem;
+    color: var(--ink-soft);
+    margin-top: 0.7rem;
+  }
+
+  /* ---- stack list ---- */
+  ul.stack { list-style: none; margin: 0; padding: 0; }
+  ul.stack li {
+    padding: 0.55rem 0;
+    border-bottom: 1px solid var(--line);
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    gap: 0.8rem;
+    font-size: 0.92rem;
+  }
+  ul.stack li:last-child { border-bottom: none; }
+  ul.stack .role {
+    font-family: ui-monospace, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+  ul.stack .impl b { color: var(--ink); }
+  ul.stack .impl span.license {
+    font-family: ui-monospace, monospace;
+    font-size: 0.7rem;
+    color: var(--solder);
+    margin-left: 0.4rem;
+  }
+
+  /* ---- foundation ---- */
+  .foundation { margin-top: 2.8rem; padding-top: 2.2rem; border-top: 1px solid var(--line); }
+  .foundation-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 1rem;
+    margin-top: 1.2rem;
+  }
+  .fcard {
+    border: 1px solid var(--card-border);
+    border-radius: 6px;
+    padding: 1rem 1.1rem;
+    background: var(--paper-2);
+  }
+  .fcard .flabel {
+    font-family: ui-monospace, monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--solder);
+    margin-bottom: 0.4rem;
+  }
+  .fcard p { font-size: 0.88rem; margin: 0; color: var(--ink-soft); }
+  .fcard p b { color: var(--ink); }
+
+  footer {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--line);
+  }
+  .langs {
+    font-family: 'Noto Sans', 'Noto Serif', sans-serif;
+    font-size: 0.95rem;
+    color: var(--ink-soft);
+  }
+  .caveat {
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+    font-style: italic;
+    margin-top: 2.2rem;
+  }
+
+  @media (max-width: 600px) {
+    ul.stack li { grid-template-columns: 1fr; gap: 0.15rem; }
+  }
+</style>
+
+<div class="page">
+  <p class="eyebrow">Open-hardware sketch — India, local language, no subscription</p>
+  <h1>One problem, two interfaces</h1>
+  <p class="lede">Both paths solve the same thing — get information to someone in their own language, working offline, on hardware anyone can build without paying a company forever. What changes is whether the person needs to <i>hear</i> it or <i>see</i> it.</p>
+
+  <div class="compare-wrap">
+    <table class="compare">
+      <thead>
+        <tr><th>&nbsp;</th><th>Voice device</th><th>Lens device</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Best for</td><td class="voice-col">Farm workers, elders, low-literacy users</td><td class="lens-col">Students</td></tr>
+        <tr><td>Core interaction</td><td class="voice-col">Ask by voice, hear the answer</td><td class="lens-col">Point, read the overlay</td></tr>
+        <tr><td>Device cost*</td><td class="voice-col num">~$10</td><td class="lens-col num">~$168&ndash;198 stripped/phone-tethered &nbsp;/&nbsp; ~$650&ndash;700 full-color &mdash; a spec choice, see below</td></tr>
+        <tr><td>Recurring cost</td><td class="voice-col num">$0</td><td class="lens-col num">$0</td></tr>
+        <tr><td>Looks like normal glasses</td><td class="voice-col">N/A, no visible module needed</td><td class="lens-col">Yes &mdash; that's why it costs $500+ instead of $22, see below</td></tr>
+        <tr><td>Works in bright sun</td><td class="voice-col">Yes — no screen</td><td class="lens-col">Partial — microdisplay dims outdoors</td></tr>
+        <tr><td>Requires reading</td><td class="voice-col">No</td><td class="lens-col">Yes</td></tr>
+        <tr><td>Hands stay free</td><td class="voice-col">Yes</td><td class="lens-col">Mostly</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <section class="build">
+    <div class="build-head">
+      <span class="tag tag-voice">Path A</span>
+      <h2>The voice device</h2>
+    </div>
+    <p class="who">A field-worker's assistant: press to ask, hear the answer in Marathi, Telugu, whatever they speak. No screen to glare out or crack.</p>
+
+    <h3>Bill of materials</h3>
+    <div class="bom-wrap">
+      <table class="bom">
+        <thead><tr><th>Component</th><th>Example part</th><th class="cost">Cost @ 1k+ units</th></tr></thead>
+        <tbody>
+          <tr><td>MCU + radio</td><td>ESP32-S3 (Wi-Fi + BLE)</td><td class="cost">$2.20</td></tr>
+          <tr><td>Microphone</td><td>INMP441 I2S MEMS mic</td><td class="cost">$0.90</td></tr>
+          <tr><td>Audio out</td><td>Bone-conduction transducer</td><td class="cost">$2.50</td></tr>
+          <tr><td>Input</td><td>Push-to-talk button</td><td class="cost">$0.10</td></tr>
+          <tr><td>Battery</td><td>400 mAh LiPo</td><td class="cost">$1.80</td></tr>
+          <tr><td>Charge/protection</td><td>TP4056 + protection IC</td><td class="cost">$0.40</td></tr>
+          <tr><td>Enclosure</td><td>3D-printed shell, open CAD</td><td class="cost">$2.00</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="bom-total">Device: <b>~$10</b> &nbsp;·&nbsp; Optional offline hub (Pi Zero 2 W): <b>+$15</b> &nbsp;·&nbsp; Recurring: <b>$0</b></p>
+
+    <h3>Signal path</h3>
+    <div class="flow-wrap">
+      <div class="flow">
+        <div class="flow-stage"><span class="label">Mic + PTT</span><span class="sub">on device</span></div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-stage"><span class="label">ASR</span><span class="sub">IndicWhisper</span></div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-stage"><span class="label">Translate</span><span class="sub">IndicTrans2</span></div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-stage"><span class="label">Answer</span><span class="sub">small LLM, optional</span></div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-stage"><span class="label">TTS</span><span class="sub">Indic TTS</span></div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-stage"><span class="label">Bone-conduction</span><span class="sub">on device</span></div>
+      </div>
+    </div>
+    <p class="flow-note">The $10 device can't run these models itself — it streams audio over BLE to a <b>compute partner</b>: a companion phone app when one's around, or a $15 Raspberry Pi Zero 2 W "hub" running the full stack locally when there's no phone or signal at all.</p>
+
+    <h3>Software stack (open weight / open source)</h3>
+    <ul class="stack">
+      <li><span class="role">Wake / trigger</span><span class="impl">Push-to-talk, or <b>openWakeWord</b> for hands-free<span class="license">Apache-2.0</span></span></li>
+      <li><span class="role">Speech-to-text</span><span class="impl"><b>AI4Bharat IndicWhisper / Vakyansh</b> — 23 Indian languages<span class="license">open weights</span></span></li>
+      <li><span class="role">Translation</span><span class="impl"><b>IndicTrans2</b> — 22 scheduled languages<span class="license">MIT</span></span></li>
+      <li><span class="role">Reasoning (optional)</span><span class="impl">Quantized <b>Llama 3.2 1B/3B</b> via llama.cpp, on the hub<span class="license">open weights</span></span></li>
+      <li><span class="role">Text-to-speech</span><span class="impl"><b>AI4Bharat Indic-TTS</b><span class="license">open weights</span></span></li>
+      <li><span class="role">Free online fallback</span><span class="impl"><b>Bhashini</b> — Govt. of India's public MT/ASR/TTS API<span class="license">free, public</span></span></li>
+    </ul>
+  </section>
+
+  <section class="build">
+    <div class="build-head">
+      <span class="tag tag-lens">Path B</span>
+      <h2>The lens device</h2>
+    </div>
+    <p class="who">A student's reading companion: point it at a textbook page or a sign, get a translated overlay. Same open language stack, different last mile.</p>
+
+    <p class="flow-note" style="border-top:1px dashed var(--line); padding-top:0.8rem;"><b>Revised below.</b> The BOM this started with assumed a birdbath combiner + bare micro-OLED panel someone bonds themselves. Turns out that's not how real in-lens displays get made — even Brilliant Labs' Frame, the closest open-hardware match to G1, is factory-sealed with the OLED optically bonded to the prism at the factory; its own docs warn that opening it means "destructive disassembly." Sub-100-micron optical alignment isn't a home-assembly step. So the real version of "open + doesn't look bad" means: buy the optical engine as one sealed, pre-bonded cartridge, and build everything else &mdash; frame, battery, driver board &mdash; as the actual open, snap-together kit around it.</p>
+
+    <h3>What the optical engine actually costs &mdash; and why "monochrome" is the answer, not "cheaper distributor"</h3>
+    <p class="flow-note">The first version of this said $499 like it was the answer, sourced from one full-color module at a US prototyping distributor. That was the wrong reference class entirely &mdash; not because of markup, but because <b>full-color and monochrome are different technologies with very different costs</b>, and $150&ndash;300 is a monochrome-tier target.</p>
+    <div class="bom-wrap">
+      <table class="bom">
+        <thead><tr><th>Spec class</th><th>Price</th><th>Evidence</th></tr></thead>
+        <tbody>
+          <tr><td>Full-color, US distributor, qty 1</td><td class="cost">$499&ndash;899</td><td>Verified &mdash; DisplayModule's listed price</td></tr>
+          <tr><td>Full-color, Chinese factory direct</td><td class="cost">~$450</td><td>Verified &mdash; Zhenshi Intelligent via Global Sources, comparable spec. Full color isn't cheaper just by going direct.</td></tr>
+          <tr><td>Full-color, JBD's own cost-reduction target</td><td class="cost">"$20/eye"</td><td>Verified quote from JBD's CEO &mdash; but stated as <b>2&ndash;5 years away</b> from being real. Not available today at any volume.</td></tr>
+          <tr><td><b>Monochrome</b> (what G1 and Rokid actually use)</td><td class="cost">Likely $20&ndash;50/eye already, at real production volume</td><td>Triangulated, not directly quoted: Rokid Glasses retails its <i>entire device</i> &mdash; two monochrome micro-LED engines, a full Qualcomm AR1 SoC, 12MP camera, frame &mdash; for $499 total. That math only works if each engine costs a small fraction of that.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="flow-note"><b>So: $150&ndash;300 for a monocular monochrome engine is a genuinely plausible target</b> &mdash; probably even on the high side &mdash; if it's sourced at real production volume from a supplier who's actually shipping it. That's a short list: <b>JBD</b> is described industry-wide as "the only company to realize monetization of MicroLED micro-display," and is the confirmed supplier behind G1 and TCL's RayNeo X3 Pro. Their published dev kits (Hummingbird Mini I/II, monochrome) don't list retail prices &mdash; getting the real number for a small production run means contacting JBD directly, not guessing further from here. That's the one concrete next step that would turn "plausible" into "confirmed."</p>
+
+    <p class="flow-note" style="border-top:1px dashed var(--line); padding-top:0.8rem;"><b>"Just simple text, no color" is not a compromise here &mdash; it's the actual product category.</b> JBD's own marketing for the Hummingbird line is explicitly for "lightweight AR glasses," and G1 (text, navigation, notifications) is the real shipping proof that this spec is enough for a genuinely useful device. Full color is the harder, more expensive, not-ready-today path <i>for a use case you don't need</i>. One correction to an earlier assumption, though: checking JBD's own dev kit page, its accessories list an HDMI cable and USB adapter &mdash; meaning even the monochrome engine's dev kit expects real video-rate input, not a simple SPI/I2C text buffer an ESP32 could drive directly. So the video-capable hub (~$12&ndash;15, the Pi Zero 2 W class board) most likely still belongs in the BOM even for text-only. What a real production device does internally to get G1's long battery life is probably a more direct, efficient interface than the dev kit's HDMI path &mdash; but that's the kind of integration JBD does with an actual manufacturing partner, not something visible from a public dev-kit page.</p>
+
+    <h3>Rest of the kit (unaffected by which optical-engine tier you land on)</h3>
+    <div class="bom-wrap">
+      <table class="bom">
+        <thead><tr><th>Component</th><th>Example part</th><th class="cost">Cost</th></tr></thead>
+        <tbody>
+          <tr><td>Driver board</td><td>DM-ADTTR-048-class (Micro-HDMI in &rarr; module's parallel RGB/YCbCr)</td><td class="cost">~$50&ndash;100</td></tr>
+          <tr><td>Video-capable hub</td><td>Raspberry Pi Zero 2 W class board (needs real HDMI/video out &mdash; the ESP32-S3 from Path A can't drive this)</td><td class="cost">~$15</td></tr>
+          <tr><td>Battery</td><td>800 mAh+ LiPo (video hub draws more than an MCU)</td><td class="cost">~$4</td></tr>
+          <tr><td>Frame</td><td>3D-printed / laser-cut, open CAD &mdash; the part actually meant to be home-assembled</td><td class="cost">~$3</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="bom-total">Everything except the optical engine: <b>~$70&ndash;120</b> &nbsp;·&nbsp; Recurring: <b>$0</b> &nbsp;·&nbsp; Total device: <b>anywhere from ~$150 (if a real small-batch quote lands near the $80 mass-production tier) to ~$620 (US distributor, worst case)</b> &mdash; the range is exactly as wide as the sourcing question above, honestly.</p>
+
+    <details style="margin-top:1rem;">
+      <summary style="cursor:pointer; color:var(--ink-soft); font-size:0.85rem;">Original birdbath sketch (cheaper, bulkier, not what was actually asked for)</summary>
+      <div class="bom-wrap" style="margin-top:0.8rem;">
+        <table class="bom">
+          <thead><tr><th>Component</th><th>Example part</th><th class="cost">Cost @ 1k+ units</th></tr></thead>
+          <tbody>
+            <tr><td>MCU + radio</td><td>ESP32-S3 (Wi-Fi + BLE)</td><td class="cost">$2.20</td></tr>
+            <tr><td>Optics</td><td>Molded birdbath combiner</td><td class="cost">$4.00</td></tr>
+            <tr><td>Microdisplay</td><td>0.23&Prime; micro-OLED panel</td><td class="cost">$8.00</td></tr>
+            <tr><td>Camera (for OCR)</td><td>OV2640</td><td class="cost">$2.50</td></tr>
+            <tr><td>Battery</td><td>400 mAh LiPo</td><td class="cost">$1.80</td></tr>
+            <tr><td>Charge/protection</td><td>TP4056 + protection IC</td><td class="cost">$0.40</td></tr>
+            <tr><td>Frame</td><td>3D-printed / molded, open CAD</td><td class="cost">$3.00</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="bom-total">Device: <b>~$22</b> at 1k+ units &nbsp;·&nbsp; but: thicker module bulging off the frame, worse see-through, no bonded waveguide &mdash; the "doesn't look bad" requirement rules this out.</p>
+    </details>
+
+    <h3>Signal path</h3>
+    <div class="flow-wrap">
+      <div class="flow">
+        <div class="flow-stage"><span class="label">Camera</span><span class="sub">page / sign</span></div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-stage"><span class="label">OCR</span><span class="sub">PaddleOCR, Indic-tuned</span></div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-stage"><span class="label">Translate</span><span class="sub">IndicTrans2</span></div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-stage"><span class="label">Shape + render</span><span class="sub">HarfBuzz, on hub/phone</span></div>
+        <div class="flow-arrow">&rarr;</div>
+        <div class="flow-stage"><span class="label">Micro-OLED</span><span class="sub">on device</span></div>
+      </div>
+    </div>
+    <p class="flow-note">Indic scripts need real shaping — conjuncts and matras in Devanagari or Tamil can't just be dropped onto a grid of pixels. The ESP32 doesn't do that; it receives a pre-rendered bitmap over BLE from the same phone-or-hub compute partner as Path A and just drives the panel.</p>
+
+    <h3>Software stack (open weight / open source)</h3>
+    <ul class="stack">
+      <li><span class="role">Text recognition</span><span class="impl"><b>PaddleOCR</b> / Tesseract, Indic-tuned<span class="license">Apache-2.0</span></span></li>
+      <li><span class="role">Translation</span><span class="impl"><b>IndicTrans2</b><span class="license">MIT</span></span></li>
+      <li><span class="role">Script shaping</span><span class="impl"><b>HarfBuzz</b> for correct Devanagari / Tamil / Telugu layout<span class="license">MIT</span></span></li>
+      <li><span class="role">Free online fallback</span><span class="impl"><b>Bhashini</b> OCR + MT endpoints<span class="license">free, public</span></span></li>
+    </ul>
+  </section>
+
+  <section class="build">
+    <div class="build-head">
+      <h2 style="margin-top:0;">Putting it all together — every component, one device</h2>
+    </div>
+    <p class="who">Not a third path — this merges both: a real inbuilt display <i>and</i> the voice pipeline, since a device that only speaks or only shows text isn't the "great" version either. Grouped by function, with an honest lowest-cost estimate.</p>
+
+    <div class="bom-wrap">
+      <table class="bom">
+        <thead><tr><th>Category</th><th>Component</th><th>Why it's needed</th><th class="cost">Est. cost @ real volume</th></tr></thead>
+        <tbody>
+          <tr><td>Display</td><td>Sealed monochrome micro-LED waveguide engine (monocular) — <i>not</i> full-color</td><td>The actual in-lens image — the one part that must be factory-bonded, see the monochrome-vs-full-color analysis above</td><td class="cost">$150&ndash;300 target</td></tr>
+          <tr><td>Display</td><td>Driver / timing controller</td><td>Feeds the engine correctly-timed video (parallel RGB/YCbCr or LVDS)</td><td class="cost">~$8</td></tr>
+          <tr><td>Compute</td><td>Video-capable SoC</td><td>Renders frames and drives the display in real time — an ESP32-class MCU cannot do this</td><td class="cost">~$12</td></tr>
+          <tr><td>Compute</td><td>Low-power MCU (ESP32-S3 class)</td><td>BLE to phone, always-on sensors, wake logic — stays on when the video SoC sleeps to save battery</td><td class="cost">$2.20</td></tr>
+          <tr><td>Camera</td><td>OV2640-class module</td><td>OCR / "translate what I see," photo capture</td><td class="cost">$2.50</td></tr>
+          <tr><td>Audio in</td><td>MEMS microphone</td><td>Voice questions (Whisper/IndicConformerASR pipeline)</td><td class="cost">$0.90</td></tr>
+          <tr><td>Audio out</td><td>Bone-conduction transducer</td><td>Spoken answers without blocking ambient sound — same reasoning as the voice-only device</td><td class="cost">~$2.50</td></tr>
+          <tr><td>Sensors</td><td>IMU (accelerometer + gyro)</td><td>Head-gesture input (nod to confirm), counts as "not crappy" polish real products include</td><td class="cost">~$1.00</td></tr>
+          <tr><td>Sensors</td><td>Ambient light + proximity</td><td>Auto-brightness (the display dims outdoors, see Milestone notes) and auto sleep when not worn</td><td class="cost">~$0.40</td></tr>
+          <tr><td>Power</td><td>Battery (split across temples)</td><td>Real glasses distribute weight/battery across both temples, not one lump</td><td class="cost">~$3.00</td></tr>
+          <tr><td>Power</td><td>Multi-rail PMIC</td><td>The display alone needs 3 separate voltages (1.8V logic / 3.3V panel / -6.6V cathode) &mdash; a simple TP4056 charger isn't enough for this device</td><td class="cost">~$2.00</td></tr>
+          <tr><td>Mechanical</td><td>Frame, temples, real hinges, nose pads</td><td>"Doesn't look bad" requires actual glasses hardware, not a 3D-printed clip</td><td class="cost">~$6.00</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="bom-total">Monocular total (monochrome, at target pricing): <b>~$190&ndash;230</b> &nbsp;·&nbsp; matches the $150&ndash;300 ask once the rest of the kit is added</p>
+
+    <h3>Stripped to essentials — cutting what isn't the actual ask</h3>
+    <p class="flow-note">"Lower" has two honest levers left, beyond hoping the display gets cheaper. Both mean removing things, not better sourcing:</p>
+    <div class="bom-wrap">
+      <table class="bom">
+        <thead><tr><th>Cut</th><th>Reasoning</th><th class="cost">Savings</th></tr></thead>
+        <tbody>
+          <tr><td>Drop the standalone video hub (~$12)</td><td>The whole video/compute-capable SoC was for a hub-free, fully offline mode. Almost everyone this is for already owns <i>some</i> phone &mdash; India's mobile penetration is high even among low-income users. Let the phone render frames and stream them over BLE/Wi-Fi Direct instead; the glasses only need enough to receive and relay to the driver board, which is a simpler, cheaper job than full on-device rendering.</td><td class="cost">&minus;$10&ndash;12 (a simple relay chip instead, ~$2&ndash;3, estimate not a sourced part)</td></tr>
+          <tr><td>Drop the camera (&minus;$2.50)</td><td>OCR/"translate what I see" is a stretch feature, not the core ask &mdash; display + voice Q&amp;A is. Cuttable without losing what you actually described wanting.</td><td class="cost">&minus;$2.50</td></tr>
+          <tr><td>Drop IMU + light/proximity sensors (&minus;$1.40)</td><td>Nice polish, not essential to text-on-a-lens-plus-voice. First thing a real cost-down pass removes.</td><td class="cost">&minus;$1.40</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="bom-total">Stripped monocular total: <b>~$168&ndash;198</b> (display $150&ndash;300 tier &#43; ~$18 for everything else, phone-tethered, no camera/extra sensors)</p>
+    <p class="flow-note">At the low end of the display range, that's real, added movement &mdash; not a trick, an actual smaller device that does less (relies on a phone you already own, drops OCR, drops gesture/auto-brightness). The display line is still the one lever left that could move further, and still needs a real JBD quote to confirm rather than assume.</p>
+
+    <h3>How light &mdash; reasoned from real shipping products, not guessed</h3>
+    <div class="bom-wrap">
+      <table class="bom">
+        <thead><tr><th>Device</th><th>Weight</th><th>What it's carrying</th></tr></thead>
+        <tbody>
+          <tr><td>Even Realities G1</td><td class="cost">&lt;40g (~44g w/ Rx lenses)</td><td>Binocular monochrome waveguide, no camera, no onboard SoC &mdash; minimalist by design, same philosophy as this stripped build</td></tr>
+          <tr><td>Brilliant Labs Frame</td><td class="cost">39g</td><td>Binocular, but <i>full-color</i> engines &mdash; physically larger/heavier than monochrome</td></tr>
+          <tr><td>Rokid Glasses</td><td class="cost">48g</td><td>Binocular monochrome <i>plus</i> a full Qualcomm AR1 SoC and 12MP camera &mdash; the extra ~8&ndash;9g over G1 is exactly the cost of carrying onboard compute and a camera</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="flow-note">The pattern across all three: frame material and mechanical structure (hinges, temple arms, nose bridge) is the weight floor no matter what, but everything carried <i>inside</i> the frame is optional weight. This build is already the minimalist end of that spectrum &mdash; monocular (one waveguide engine, not two) and phone-tethered (no onboard SoC, no camera, matching G1's approach rather than Rokid's). Reasoned from G1's own &lt;40g binocular budget: removing one entire optical engine and driver plausibly saves 8&ndash;10g on its own, before even counting the camera/SoC G1 already doesn't carry.</p>
+    <p class="bom-total">Target: <b>~26&ndash;32g</b> &mdash; lighter than G1, on the strength of being monocular where G1 is binocular</p>
+    <p class="flow-note">One more real lever, borrowed directly from G1's own design: it ships with a <b>charging case that has its own 2,000mAh battery</b>, so the glasses themselves only need enough onboard battery for hours between case top-ups, not multi-day standalone capacity. The same trick applies here &mdash; keep the onboard battery small (which is already what the ~$3 battery line item in the BOM assumes) and put the bulk capacity in a pocket-sized case instead of on someone's face. That's how G1 gets away with under 40 grams carrying real electronics, and it's copyable, not proprietary.</p>
+
+    <h3>How it could actually look</h3>
+    <p class="flow-note">A fictional reference point like EDITH (Tony Stark's glasses from <i>Spider-Man: Far From Home</i>) isn't a fair engineering bar &mdash; it's CGI: light-blue lenses, silver frame, no bonded optics, no battery, no hinges taking real mechanical stress. But the <i>style</i> it's evoking &mdash; sleek, minimal, could pass as fashion eyewear &mdash; is a real, already-proven target. Reviewers on G1 don't say "pretty good for a tech product"; they say "genuinely normal, wear-them-to-a-job-interview glasses." The only tells they found: a faint rectangular waveguide visible up close (easily mistaken for progressive bifocals) and slightly chunky capsules at the temple tips housing electronics.</p>
+    <p class="flow-note">This build has two concrete reasons to do <i>better</i> than G1 on exactly those two tells, not just match it:</p>
+    <div class="foundation-grid">
+      <div class="fcard">
+        <div class="flabel">One waveguide tell, not two</div>
+        <p>G1 shows the faint rectangular waveguide in <i>both</i> lenses (binocular). This build is monocular &mdash; one lens is genuinely plain glass or a normal prescription lens, zero tech, zero tell. Only one side has anything to notice at all.</p>
+      </div>
+      <div class="fcard">
+        <div class="flabel">Slimmer temple tips</div>
+        <p>G1's "dead giveaway" temple capsules house its onboard electronics. This build carries less there &mdash; no camera, no heavy SoC (phone-tethered), same small-battery-plus-case trick G1 already uses. Less to hide means a real shot at thinner temple tips than G1's.</p>
+      </div>
+    </div>
+    <p class="flow-note">Frame material doesn't need to be exotic to get there, either &mdash; G1 uses magnesium/titanium alloy, but plenty of genuinely stylish real eyewear (including Rokid's temples) is molded TR90 or polycarbonate, which is cheap, light, and comes in real colors/finishes. And because the optical cartridge is a small sealed module, the same core engine could sit behind multiple open frame designs &mdash; round, square, whatever &mdash; the same way G1 ships as both G1A and G1B. The honest answer: <b>closer to G1 than to EDITH, but with real reasons to be even less noticeable than G1 &mdash; and G1 already clears "normal glasses" by most reviewers' account.</b></p>
+    <p class="flow-note"><b>This is a synthesized estimate, not a quote.</b> The non-display parts (MCU, camera, mic, sensors, battery, mechanical) are grounded in real component pricing sourced earlier this conversation and are unlikely to move much. The display line is the one that matters: $150&ndash;300 is a real, evidence-triangulated target for a <i>monochrome</i> engine at production volume (see above), not a number pulled from a distributor listing. It is still not a confirmed quote &mdash; JBD is the concrete next contact for that. Two numbers to keep separate: this monochrome target (~$190&ndash;230 total, matches what you asked for) versus a <i>full-color</i> build using the DisplayModule-class part, which stays at ~$650&ndash;700 regardless of volume tier, because full-color's cost floor is years out per JBD's own roadmap. Monochrome is the affordable path; full-color is the expensive one, and that's a spec choice, not a sourcing problem.</p>
+  </section>
+
+  <section class="build">
+    <div class="build-head">
+      <h2 style="margin-top:0;">What a normal person actually pays</h2>
+    </div>
+    <p class="who">Manufacturing cost and end-user price are two different numbers. Closing that gap for someone who isn't wealthy is a pricing and funding decision, not an engineering one &mdash; here's that decision laid out honestly, at today's rate (&#8377;95 &asymp; $1), using the <b>stripped, phone-tethered BOM</b> above (~$185&ndash;218 manufacturing cost, camera and hub removed).</p>
+
+    <div class="bom-wrap">
+      <table class="bom">
+        <thead><tr><th>Model</th><th>Markup logic</th><th class="cost">Price (USD)</th><th class="cost">Price (INR)</th></tr></thead>
+        <tbody>
+          <tr><td>Standard retail (G1/Rokid-style)</td><td>2&ndash;2.2&times; manufacturing cost &mdash; distributor + retailer + brand margin, R&amp;D amortized in</td><td class="cost">~$405&ndash;480</td><td class="cost">~&#8377;38,500&ndash;45,600</td></tr>
+          <tr><td>Lean direct-to-consumer</td><td>1.3&times; &mdash; a small mission-driven maker selling direct, modest margin to stay solvent</td><td class="cost">~$240&ndash;283</td><td class="cost">~&#8377;22,800&ndash;26,900</td></tr>
+          <tr><td><b>At-cost</b></td><td>1.0&times; &mdash; manufacturing cost plus real assembly/optical-QC labor, zero margin</td><td class="cost">~$185&ndash;218</td><td class="cost">~&#8377;17,600&ndash;20,700</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="flow-note"><b>Stripping the hub and camera moved the honest at-cost floor from &#8377;23,000&ndash;25,000 down to roughly &#8377;18,000&ndash;20,000.</b> That's real movement, not a trick &mdash; a smaller device that leans on a phone you already own instead of carrying its own. It's still a significant sum, not "walk in and buy it" money for most of the people this was actually built for. Getting further below that isn't a components problem anymore; it needs one of these, all with real precedent in India specifically:</p>
+
+    <div class="foundation-grid">
+      <div class="fcard">
+        <div class="flabel">EMI financing</div>
+        <p>&#8377;19,000 at 0%-interest "no-cost EMI" (standard for electronics in India already) becomes under &#8377;1,600/month for a year. Doesn't lower the real cost, but changes whether someone can actually afford it &mdash; this alone closes most of the practical gap without needing a subsidy at all.</p>
+      </div>
+      <div class="fcard">
+        <div class="flabel">CSR mandate (real law)</div>
+        <p>Companies Act 2013, Section 135 legally requires large Indian companies to spend 2% of net profit on CSR &mdash; education and assistive technology already qualify. This is a real, large, existing pool of money, not a hypothetical grant to chase.</p>
+      </div>
+      <div class="fcard">
+        <div class="flabel">Government procurement</div>
+        <p>States have already run free-laptop and free-tablet schemes for students (Tamil Nadu, Punjab, UP). A device this framed as educational/assistive equity has a real precedent path into that kind of bulk, subsidized distribution &mdash; sold to government at cost, given to the end user free or near-free.</p>
+      </div>
+      <div class="fcard">
+        <div class="flabel">Cross-subsidy</div>
+        <p>Sell at the lean-D2C price (~&#8377;24,000&ndash;27,000) to willing urban/institutional buyers, use that margin to fund free or steeply discounted units for the farm-worker/student users this was actually built for. Real precedent in Indian social enterprises, not a novel idea.</p>
+      </div>
+    </div>
+    <p class="flow-note">None of these are things I can set up from here &mdash; they're real-world funding and distribution work for a person or organization to pursue. The one lever still left that could move the &#8377;18,000&ndash;20,000 floor itself, rather than who pays it, is the display module: it's still a triangulated target, not a confirmed quote, and a real JBD conversation at genuine committed volume (a government or NGO order, not one person buying one unit) is the only thing that could move it further. Everything else in this device is already a normal, sourced parts list.</p>
+  </section>
+
+  <section class="foundation">
+    <h3 style="margin-top:0;">What actually keeps this open</h3>
+    <p style="color:var(--ink-soft); font-size:0.95rem;">The point of open hardware here isn't ideology — it's that nobody should have to pay a monthly fee just to keep hearing their own language back from a device they already bought.</p>
+    <div class="foundation-grid">
+      <div class="fcard">
+        <div class="flabel">Schematics + CAD</div>
+        <p>KiCad source and STL/STEP files published under <b>CERN-OHL-W</b> — anyone can fabricate without a royalty.</p>
+      </div>
+      <div class="fcard">
+        <div class="flabel">Firmware</div>
+        <p>Built on <b>ESP-IDF / Arduino core</b>, licensed Apache-2.0 or GPL. No vendor SDK, no locked bootloader.</p>
+      </div>
+      <div class="fcard">
+        <div class="flabel">Language models</div>
+        <p><b>AI4Bharat's</b> open-weight ASR, MT and TTS models run entirely on hardware you own — no per-call fee.</p>
+      </div>
+      <div class="fcard">
+        <div class="flabel">Cloud fallback</div>
+        <p><b>Bhashini</b>, the Government of India's public language API, is free infrastructure — a safety net, never a requirement.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="foundation" style="margin-top:2.2rem;">
+    <h3 style="margin-top:0;">Start here — real repos, not a blank KiCad file</h3>
+    <p style="color:var(--ink-soft); font-size:0.95rem;">Both device shapes already exist as working open hardware. Fork one of these instead of designing a board from zero.</p>
+
+    <h3>Voice device — fork this hardware</h3>
+    <ul class="stack">
+      <li><span class="role">Reference build</span><span class="impl"><b><a href="https://github.com/BasedHardware/omi" style="color:inherit;">BasedHardware/omi</a></b> — ESP32-S3 wearable, mic, BLE-to-phone, DevKit 1 is hand-assemblable<span class="license">open hardware</span></span></li>
+      <li><span class="role">Speech-to-text</span><span class="impl"><b><a href="https://github.com/AI4Bharat/IndicConformerASR" style="color:inherit;">AI4Bharat/IndicConformerASR</a></b>, or <a href="https://github.com/Open-Speech-EkStep/vakyansh-models" style="color:inherit;">Vakyansh</a> for a lighter model<span class="license">open weights</span></span></li>
+      <li><span class="role">Translation</span><span class="impl"><b><a href="https://github.com/AI4Bharat/IndicTrans2" style="color:inherit;">AI4Bharat/IndicTrans2</a></b> — 22 languages<span class="license">MIT</span></span></li>
+      <li><span class="role">Text-to-speech</span><span class="impl"><b><a href="https://github.com/AI4Bharat/Indic-TTS" style="color:inherit;">AI4Bharat/Indic-TTS</a></b>, or newer <a href="https://github.com/AI4Bharat/IndicF5" style="color:inherit;">IndicF5</a> for higher quality<span class="license">open weights</span></span></li>
+      <li><span class="role">Wake word</span><span class="impl"><b><a href="https://github.com/dscripka/openWakeWord" style="color:inherit;">dscripka/openWakeWord</a></b><span class="license">Apache-2.0</span></span></li>
+      <li><span class="role">On-device LLM (hub)</span><span class="impl"><b><a href="https://github.com/ggml-org/llama.cpp" style="color:inherit;">ggml-org/llama.cpp</a></b> to run a quantized 1–3B model on the offline hub<span class="license">MIT</span></span></li>
+      <li><span class="role">MCU toolchain</span><span class="impl"><b><a href="https://github.com/espressif/esp-idf" style="color:inherit;">espressif/esp-idf</a></b><span class="license">Apache-2.0</span></span></li>
+    </ul>
+
+    <h3>Lens device — source the cartridge, fork the software</h3>
+    <ul class="stack">
+      <li><span class="role">Optical engine (buy, don't build)</span><span class="impl"><b><a href="https://www.displaymodule.com/products/dmgtx0023wgna-0-23-micro-oled-optical-waveguide-module-ar-smart-glasse" style="color:inherit;">DisplayModule DMGTX0023WGNA</a></b> — $499, sealed &amp; pre-bonded, ships to individuals in single units<span class="license">commercial part</span></span></li>
+      <li><span class="role">Driver board for it</span><span class="impl"><b>DM-ADTTR-048</b> — same product page, Micro-HDMI in<span class="license">commercial part</span></span></li>
+      <li><span class="role">Reference build (no display, for comparison)</span><span class="impl"><b><a href="https://github.com/BasedHardware/OpenGlass" style="color:inherit;">BasedHardware/OpenGlass</a></b> — camera + XIAO ESP32-S3 clipped onto any glasses, streams to phone<span class="license">open hardware</span></span></li>
+      <li><span class="role">Reference build (real display, factory-sealed)</span><span class="impl"><b><a href="https://github.com/brilliantlabsAR/frame-codebase" style="color:inherit;">brilliantlabsAR/frame-codebase</a></b> — worth reading even though you can't rebuild it yourself: shows exactly what driving a bonded optical engine actually requires (FPGA + nRF52)<span class="license">open hardware</span></span></li>
+      <li><span class="role">Text recognition</span><span class="impl"><b><a href="https://github.com/PaddlePaddle/PaddleOCR" style="color:inherit;">PaddlePaddle/PaddleOCR</a></b> — 100+ languages including Indic scripts<span class="license">Apache-2.0</span></span></li>
+      <li><span class="role">Translation</span><span class="impl"><b><a href="https://github.com/AI4Bharat/IndicTrans2" style="color:inherit;">AI4Bharat/IndicTrans2</a></b><span class="license">MIT</span></span></li>
+      <li><span class="role">Script shaping</span><span class="impl"><b><a href="https://github.com/harfbuzz/harfbuzz" style="color:inherit;">harfbuzz/harfbuzz</a></b> — correct Devanagari/Tamil/Telugu rendering<span class="license">MIT</span></span></li>
+    </ul>
+
+    <h3>Free fallback API (both paths)</h3>
+    <ul class="stack">
+      <li><span class="role">Bhashini docs</span><span class="impl"><b><a href="https://bhashini.gitbook.io/bhashini-apis" style="color:inherit;">bhashini.gitbook.io/bhashini-apis</a></b> — request format, auth, model catalogue<span class="license">free, public</span></span></li>
+      <li><span class="role">Bhashini official</span><span class="impl"><b><a href="https://bhashini.gov.in/api-documentation" style="color:inherit;">bhashini.gov.in/api-documentation</a></b><span class="license">Govt. of India</span></span></li>
+    </ul>
+    <p class="flow-note">What's actually "open" here is different from the voice device: you can't fork your way to a bonded optical engine, so openness means the frame CAD, the driver firmware, and the language stack are all yours to modify — the $499 cartridge is a bought part, same as a screen is a bought part in any open-hardware laptop. <b>OpenGlass</b> is still the right pick if a display isn't actually required and $22 vs. $570 matters more than looking like normal glasses.</p>
+  </section>
+
+  <footer>
+    <p class="langs">हिंदी · தமிழ் · తెలుగు · मराठी · ਪੰਜਾਬੀ · বাংলা — plus 16 more scheduled languages, same stack, no extra license.</p>
+    <p class="caveat">*Component costs are directional planning estimates at volume, not vendor quotes — get real numbers before committing to a BOM.</p>
+  </footer>
+</div>

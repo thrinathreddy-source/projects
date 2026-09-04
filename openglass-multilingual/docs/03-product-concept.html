@@ -1,0 +1,505 @@
+<title>Drishti — smart glasses that speak your language</title>
+<style>
+  /* Committed single visual world: a HUD at night. The product's identity is a
+     glowing green micro-LED display in front of your eye — a light theme would
+     erase the one thing the page is about. Dark in both OS themes, by choice. */
+  :root, :root[data-theme="light"], :root[data-theme="dark"] {
+    --void: #05080601;
+    --bg: #050806;
+    --bg-lift: #0b100d;
+    --bg-card: #0e1410;
+    --hud: #6ee787;
+    --hud-dim: #2f6b42;
+    --hud-glow: rgba(110,231,135,0.55);
+    --text: #e9efea;
+    --muted: #7d8b82;
+    --faint: #4a564e;
+    --line: rgba(233,239,234,0.10);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  .mono {
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 1.5rem; }
+
+  /* ---------- shared motion ---------- */
+  .rise { opacity: 0; transform: translateY(28px); transition: opacity .9s cubic-bezier(.2,.7,.3,1), transform .9s cubic-bezier(.2,.7,.3,1); }
+  .rise.in { opacity: 1; transform: none; }
+  .rise.d1 { transition-delay: .10s; } .rise.d2 { transition-delay: .20s; }
+  .rise.d3 { transition-delay: .30s; } .rise.d4 { transition-delay: .40s; }
+
+  /* ---------- hero ---------- */
+  header.hero {
+    min-height: 100svh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    padding: 5rem 1.5rem 3rem; position: relative;
+    background: radial-gradient(ellipse 70% 50% at 50% 42%, rgba(110,231,135,0.07), transparent 70%);
+  }
+  .eyebrow {
+    font-family: ui-monospace, "SF Mono", monospace;
+    font-size: .68rem; letter-spacing: .28em; text-transform: uppercase;
+    color: var(--hud); margin: 0 0 1.6rem; opacity: .85;
+  }
+  h1.big {
+    font-size: clamp(2.7rem, 8.5vw, 6rem); line-height: .95; margin: 0 0 1.4rem;
+    letter-spacing: -0.045em; font-weight: 700; text-wrap: balance;
+  }
+  h1.big em { font-style: normal; color: var(--hud); text-shadow: 0 0 34px var(--hud-glow); }
+  .sub {
+    font-size: clamp(1rem, 2.2vw, 1.3rem); color: var(--muted); max-width: 46ch;
+    margin: 0 auto 2.8rem; line-height: 1.5; text-wrap: balance;
+  }
+  .glasses-stage { width: min(100%, 860px); margin: 0 auto; }
+  svg.glasses { width: 100%; height: auto; display: block; overflow: visible; }
+  svg.glasses .ln {
+    fill: none; stroke: var(--text); stroke-width: 3.2;
+    stroke-linecap: round; stroke-linejoin: round;
+    stroke-dasharray: 1; stroke-dashoffset: 1;
+    transition: stroke-dashoffset 1.9s cubic-bezier(.35,.6,.2,1);
+  }
+  .drawn svg.glasses .ln { stroke-dashoffset: 0; }
+  svg.glasses .ln.s1 { transition-delay: .15s; } svg.glasses .ln.s2 { transition-delay: .40s; }
+  svg.glasses .ln.s3 { transition-delay: .62s; } svg.glasses .ln.s4 { transition-delay: .80s; }
+  svg.glasses .wg {
+    fill: var(--hud); opacity: 0; transition: opacity 1s ease 1.7s;
+    filter: drop-shadow(0 0 14px var(--hud-glow));
+  }
+  .drawn svg.glasses .wg { opacity: .92; animation: flicker 5s ease-in-out 2.7s infinite; }
+  @keyframes flicker { 0%,100%{opacity:.92} 47%{opacity:.72} 52%{opacity:.95} }
+  svg.glasses .wgtext { fill: #05080a; font-family: ui-monospace, monospace; font-size: 15px; font-weight: 700; opacity: 0; transition: opacity .7s ease 2.2s; }
+  .drawn svg.glasses .wgtext { opacity: .85; }
+
+  .scrollcue {
+    margin-top: 3rem; font-family: ui-monospace, monospace; font-size: .64rem;
+    letter-spacing: .22em; text-transform: uppercase; color: var(--faint);
+    animation: bob 2.6s ease-in-out infinite;
+  }
+  @keyframes bob { 0%,100%{transform:translateY(0);opacity:.55} 50%{transform:translateY(7px);opacity:1} }
+
+  /* ---------- stat band ---------- */
+  .band { padding: 7rem 0; border-top: 1px solid var(--line); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px,1fr)); gap: 3rem 2rem; text-align: center; }
+  .stat .v {
+    font-family: ui-monospace, monospace; font-size: clamp(2.4rem,6vw,3.6rem);
+    font-weight: 700; letter-spacing: -.04em; color: var(--hud);
+    text-shadow: 0 0 30px var(--hud-glow); line-height: 1;
+  }
+  .stat .v .u { font-size: .4em; letter-spacing: 0; margin-left: .12em; text-shadow: none; color: var(--muted); }
+  .stat .k { margin-top: .8rem; font-size: .82rem; color: var(--muted); letter-spacing: .02em; }
+
+  /* ---------- section headings ---------- */
+  .sec-label {
+    font-family: ui-monospace, monospace; font-size: .66rem; letter-spacing: .24em;
+    text-transform: uppercase; color: var(--hud); opacity: .8; margin: 0 0 1.2rem;
+  }
+  h2.hd {
+    font-size: clamp(1.9rem, 4.6vw, 3.1rem); line-height: 1.06; letter-spacing: -.035em;
+    font-weight: 700; margin: 0 0 1.1rem; text-wrap: balance;
+  }
+  p.body {
+    font-size: clamp(1rem,1.9vw,1.16rem); color: var(--muted); line-height: 1.62;
+    max-width: 56ch; margin: 0 0 1rem;
+  }
+  p.body b { color: var(--text); font-weight: 600; }
+
+  /* ---------- exploded sticky ---------- */
+  .explode-outer { height: 340vh; position: relative; }
+  .explode-sticky {
+    position: sticky; top: 0; height: 100svh; display: flex;
+    flex-direction: column; align-items: center; justify-content: center;
+    overflow: hidden;
+  }
+  .ex-stage { position: relative; width: min(94vw, 860px); }
+  .ex-svg { width: 100%; height: auto; display: block; overflow: visible; }
+  .ex-svg .ln { fill: none; stroke: var(--faint); stroke-width: 2.6; stroke-linecap: round; }
+  .callout { opacity: 0; transition: opacity .5s ease, transform .5s cubic-bezier(.2,.7,.3,1); }
+  .callout.on { opacity: 1; }
+  .callout line { stroke: var(--hud-dim); stroke-width: 1.4; }
+  .callout circle { fill: var(--hud); filter: drop-shadow(0 0 8px var(--hud-glow)); }
+  .callout .ct { fill: var(--text); font-size: 17px; font-weight: 650; font-family: -apple-system, system-ui, sans-serif; }
+  .callout .cs { fill: var(--muted); font-size: 13px; font-family: ui-monospace, monospace; }
+  .ex-title { text-align: center; width: 90%; margin-bottom: 2.5rem; flex: 0 0 auto; }
+
+  /* ---------- HUD / language centerpiece ---------- */
+  .hud-sec { padding: 8rem 0; border-top: 1px solid var(--line); }
+  .lens {
+    position: relative; margin: 3rem auto 0; width: min(92vw, 720px); aspect-ratio: 16/8;
+    border-radius: 18px; overflow: hidden;
+    background:
+      radial-gradient(ellipse 80% 90% at 30% 20%, rgba(120,150,130,0.14), transparent 60%),
+      linear-gradient(165deg, #0a1410 0%, #060a08 55%, #040706 100%);
+    border: 1px solid rgba(233,239,234,0.09);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .lens::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(0deg, rgba(110,231,135,0.035) 0 1px, transparent 1px 3px);
+  }
+  .hud-panel {
+    position: relative; z-index: 2; text-align: center; padding: 1.4rem 1.8rem;
+    border: 1px solid rgba(110,231,135,0.35); border-radius: 8px;
+    background: rgba(6,14,9,0.55); min-width: min(78%, 460px);
+    box-shadow: 0 0 44px rgba(110,231,135,0.10), inset 0 0 26px rgba(110,231,135,0.05);
+  }
+  .hud-tag {
+    font-family: ui-monospace, monospace; font-size: .6rem; letter-spacing: .2em;
+    text-transform: uppercase; color: var(--hud-dim); margin-bottom: .7rem;
+  }
+  .hud-line {
+    color: var(--hud); text-shadow: 0 0 18px var(--hud-glow);
+    font-size: clamp(1.05rem, 3.1vw, 1.7rem); line-height: 1.5; min-height: 2.6em;
+    display: flex; align-items: center; justify-content: center;
+    font-family: "Noto Serif Devanagari", "Noto Sans Devanagari", "Noto Sans Bengali",
+                 "Noto Sans Telugu", "Noto Sans Tamil", "Noto Sans Gurmukhi",
+                 -apple-system, system-ui, sans-serif;
+    transition: opacity .45s ease;
+  }
+  .hud-lang {
+    margin-top: .8rem; font-family: ui-monospace, monospace; font-size: .68rem;
+    letter-spacing: .16em; text-transform: uppercase; color: var(--faint);
+    transition: opacity .45s ease;
+  }
+  .fade-out { opacity: 0; }
+  .lang-row {
+    display: flex; flex-wrap: wrap; gap: .5rem; justify-content: center; margin-top: 2.4rem;
+  }
+  .lang-chip {
+    font-family: ui-monospace, monospace; font-size: .7rem; letter-spacing: .06em;
+    padding: .34rem .72rem; border-radius: 100px; border: 1px solid var(--line);
+    color: var(--muted); transition: color .4s ease, border-color .4s ease, background .4s ease;
+  }
+  .lang-chip.live { color: var(--hud); border-color: rgba(110,231,135,0.45); background: rgba(110,231,135,0.07); }
+
+  /* ---------- split rows ---------- */
+  .split {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-items: center;
+    max-width: 1040px; margin: 0 auto; padding: 6rem 1.5rem;
+    border-top: 1px solid var(--line);
+  }
+  .cardbox { background: var(--bg-card); border: 1px solid var(--line); border-radius: 14px; padding: 1.8rem; }
+  .speclist { list-style: none; margin: 0; padding: 0; }
+  .speclist li { display: flex; justify-content: space-between; gap: 1.2rem; padding: .78rem 0; border-bottom: 1px solid var(--line); font-size: .93rem; }
+  .speclist li:last-child { border-bottom: none; }
+  .speclist .sk { color: var(--muted); }
+  .speclist .sv { font-family: ui-monospace, monospace; font-variant-numeric: tabular-nums; text-align: right; }
+  .speclist .sv.hi { color: var(--hud); }
+
+  /* ---------- price ---------- */
+  .price-sec { padding: 8rem 0 6rem; border-top: 1px solid var(--line); text-align: center; }
+  .price-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 1.2rem; margin-top: 3rem; text-align: left; }
+  .pcard { background: var(--bg-card); border: 1px solid var(--line); border-radius: 14px; padding: 1.6rem; }
+  .pcard.feature { border-color: rgba(110,231,135,0.4); background: linear-gradient(180deg, rgba(110,231,135,0.07), var(--bg-card)); }
+  .pcard .pl { font-family: ui-monospace, monospace; font-size: .64rem; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin-bottom: .8rem; }
+  .pcard.feature .pl { color: var(--hud); }
+  .pcard .pv { font-family: ui-monospace, monospace; font-size: 1.85rem; font-weight: 700; letter-spacing: -.03em; line-height: 1; }
+  .pcard.feature .pv { color: var(--hud); text-shadow: 0 0 26px var(--hud-glow); }
+  .pcard .pd { margin-top: .7rem; font-size: .86rem; color: var(--muted); line-height: 1.5; }
+
+  footer { border-top: 1px solid var(--line); padding: 3rem 0 5rem; text-align: center; }
+  footer p { color: var(--faint); font-size: .82rem; margin: .4rem 0; }
+  .disclaimer { max-width: 62ch; margin: 0 auto; line-height: 1.6; }
+
+  @media (max-width: 780px) {
+    .split { grid-template-columns: 1fr; gap: 2.4rem; padding: 4.5rem 1.5rem; }
+    .explode-outer { height: 300vh; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .rise { opacity: 1 !important; transform: none !important; transition: none !important; }
+    .drawn svg.glasses .wg, svg.glasses .wg { animation: none !important; opacity: .92 !important; transition: none !important; }
+    svg.glasses .ln { stroke-dashoffset: 0 !important; transition: none !important; }
+    svg.glasses .wgtext { opacity: .85 !important; transition: none !important; }
+    .scrollcue { animation: none; }
+    .callout { transition: none; }
+  }
+</style>
+
+<header class="hero" id="hero">
+  <p class="eyebrow rise d1">Monocular · Micro-LED · Offline</p>
+  <h1 class="big rise d2">Your language,<br><em>in your line of sight.</em></h1>
+  <p class="sub rise d3">A display you forget is there, until it tells you something you needed to know — in Telugu, in Bengali, in Marathi. No subscription. No cloud. No English required.</p>
+
+  <div class="glasses-stage rise d4">
+    <svg class="glasses" viewBox="0 0 900 300" role="img" aria-label="Line drawing of slim smart glasses with a small illuminated display panel in the right lens">
+      <path class="ln s2" pathLength="1" d="M120 130 L 44 88"/>
+      <path class="ln s2" pathLength="1" d="M780 130 L 856 88"/>
+      <rect class="ln s1" pathLength="1" x="120" y="88" width="250" height="140" rx="52"/>
+      <rect class="ln s1" pathLength="1" x="530" y="88" width="250" height="140" rx="52"/>
+      <path class="ln s3" pathLength="1" d="M370 126 C 412 100, 488 100, 530 126"/>
+      <path class="ln s4" pathLength="1" d="M186 228 L 176 258"/>
+      <path class="ln s4" pathLength="1" d="M714 228 L 724 258"/>
+      <rect class="wg" x="566" y="120" width="178" height="46" rx="6"/>
+      <text class="wgtext" x="655" y="149" text-anchor="middle">నమస్కారం</text>
+    </svg>
+  </div>
+
+  <div class="scrollcue">Scroll</div>
+</header>
+
+<section class="band">
+  <div class="wrap">
+    <div class="stats">
+      <div class="stat rise"><div class="v"><span data-count="28">0</span><span class="u">g</span></div><div class="k">Lighter than the glasses you already own</div></div>
+      <div class="stat rise d1"><div class="v"><span data-count="22">0</span><span class="u">languages</span></div><div class="k">Every scheduled Indian language</div></div>
+      <div class="stat rise d2"><div class="v">₹<span data-count="0">0</span></div><div class="k">Per month, forever</div></div>
+    </div>
+  </div>
+</section>
+
+<div class="explode-outer" id="explode">
+  <div class="explode-sticky">
+    <div class="ex-title">
+      <p class="sec-label">What's inside</p>
+      <h2 class="hd" style="font-size:clamp(1.5rem,3.4vw,2.2rem)">Five parts. Nothing wasted.</h2>
+    </div>
+    <div class="ex-stage">
+      <svg class="ex-svg" viewBox="0 0 900 420" role="img" aria-label="Exploded diagram labelling the five internal components">
+        <g transform="translate(0,60)">
+          <path class="ln" d="M120 130 L 44 88"/><path class="ln" d="M780 130 L 856 88"/>
+          <rect class="ln" x="120" y="88" width="250" height="140" rx="52"/>
+          <rect class="ln" x="530" y="88" width="250" height="140" rx="52"/>
+          <path class="ln" d="M370 126 C 412 100, 488 100, 530 126"/>
+          <rect x="566" y="120" width="178" height="46" rx="6" fill="var(--hud)" opacity=".9" style="filter:drop-shadow(0 0 12px var(--hud-glow))"/>
+        </g>
+
+        <g class="callout" data-step="0">
+          <line x1="655" y1="180" x2="655" y2="76"/><circle cx="655" cy="180" r="4.5"/>
+          <text class="ct" x="655" y="58" text-anchor="middle">Optical engine</text>
+          <text class="cs" x="655" y="76" text-anchor="middle">sealed · pre-bonded waveguide</text>
+        </g>
+        <g class="callout" data-step="1">
+          <line x1="820" y1="152" x2="880" y2="238"/><circle cx="820" cy="152" r="4.5"/>
+          <text class="ct" x="884" y="258" text-anchor="end">Driver board</text>
+          <text class="cs" x="884" y="276" text-anchor="end">timing controller</text>
+        </g>
+        <g class="callout" data-step="2">
+          <line x1="80" y1="152" x2="24" y2="238"/><circle cx="80" cy="152" r="4.5"/>
+          <text class="ct" x="20" y="258">Battery</text>
+          <text class="cs" x="20" y="276">bulk charge lives in the case</text>
+        </g>
+        <g class="callout" data-step="3">
+          <line x1="200" y1="290" x2="150" y2="360"/><circle cx="200" cy="290" r="4.5"/>
+          <text class="ct" x="146" y="380">Microphone</text>
+          <text class="cs" x="146" y="398">ask it out loud</text>
+        </g>
+        <g class="callout" data-step="4">
+          <line x1="700" y1="290" x2="828" y2="360"/><circle cx="700" cy="290" r="4.5"/>
+          <text class="ct" x="888" y="380" text-anchor="end">Bone conduction</text>
+          <text class="cs" x="888" y="398" text-anchor="end">ears stay open</text>
+        </g>
+      </svg>
+    </div>
+  </div>
+</div>
+
+<section class="hud-sec">
+  <div class="wrap">
+    <p class="sec-label rise">The whole point</p>
+    <h2 class="hd rise d1">Most technology asks you to<br>learn English first.</h2>
+    <p class="body rise d2">This one doesn't. Ask a question out loud in the language you think in, and the answer appears where you're already looking — <b>rendered in your own script</b>, conjuncts and matras correct, not transliterated into Latin letters and hoped for the best.</p>
+
+    <div class="lens rise d3">
+      <div class="hud-panel">
+        <div class="hud-tag">Live translation</div>
+        <div class="hud-line" id="hudLine">आज बारिश होगी, बुवाई मत करो।</div>
+        <div class="hud-lang" id="hudLang">Hindi · हिन्दी</div>
+      </div>
+    </div>
+
+    <div class="lang-row rise d4" id="langRow">
+      <span class="lang-chip" data-l="hi">हिन्दी</span>
+      <span class="lang-chip" data-l="bn">বাংলা</span>
+      <span class="lang-chip" data-l="mr">मराठी</span>
+      <span class="lang-chip" data-l="te">తెలుగు</span>
+      <span class="lang-chip" data-l="ta">தமிழ்</span>
+      <span class="lang-chip" data-l="pa">ਪੰਜਾਬੀ</span>
+    </div>
+  </div>
+</section>
+
+<section class="split">
+  <div class="wrap" style="display:contents">
+    <div>
+      <p class="sec-label rise">Nobody's watching</p>
+      <h2 class="hd rise d1">It works with the signal off.</h2>
+      <p class="body rise d2">Speech recognition, translation and speech run on hardware you own — your phone, or a small hub that costs about as much as a phone charger. A field with no bars is not a broken feature.</p>
+      <p class="body rise d3">Which also means <b>nothing you say leaves your hands</b>. Not because of a policy you have to trust. Because there's nowhere for it to go.</p>
+    </div>
+    <div class="cardbox rise d2">
+      <ul class="speclist">
+        <li><span class="sk">Speech to text</span><span class="sv">on-device</span></li>
+        <li><span class="sk">Translation</span><span class="sv">on-device</span></li>
+        <li><span class="sk">Text to speech</span><span class="sv">on-device</span></li>
+        <li><span class="sk">Data sent to a server</span><span class="sv hi">none</span></li>
+        <li><span class="sk">Account required</span><span class="sv hi">none</span></li>
+        <li><span class="sk">Monthly fee</span><span class="sv hi">₹0</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="split">
+  <div class="wrap" style="display:contents">
+    <div class="cardbox rise">
+      <ul class="speclist">
+        <li><span class="sk">Display</span><span class="sv">monochrome micro-LED</span></li>
+        <li><span class="sk">Optics</span><span class="sv">diffractive waveguide</span></li>
+        <li><span class="sk">Configuration</span><span class="sv">monocular</span></li>
+        <li><span class="sk">Weight</span><span class="sv hi">≈28 g</span></li>
+        <li><span class="sk">Battery</span><span class="sv">all day, case tops up</span></li>
+        <li><span class="sk">Link</span><span class="sv">Bluetooth LE</span></li>
+        <li><span class="sk">Frame</span><span class="sv">open CAD, yours to change</span></li>
+      </ul>
+    </div>
+    <div>
+      <p class="sec-label rise d1">One lens, on purpose</p>
+      <h2 class="hd rise d2">The other lens is just&nbsp;a&nbsp;lens.</h2>
+      <p class="body rise d3">Two displays cost twice as much, weigh more, and put a faint rectangle in front of both of your eyes. One display does everything text needs to do — and leaves the other side completely, ordinarily clear.</p>
+      <p class="body rise d3">Cheaper, lighter, and harder to notice. <b>Constraint as a feature</b>, not a compromise.</p>
+    </div>
+  </div>
+</section>
+
+<section class="price-sec">
+  <div class="wrap">
+    <p class="sec-label rise">What it costs</p>
+    <h2 class="hd rise d1">Priced like it's meant to be&nbsp;owned.</h2>
+    <p class="body rise d2" style="margin:0 auto">Comparable glasses retail near ₹50,000. Here's the same class of display, without the margin stack.</p>
+
+    <div class="price-grid">
+      <div class="pcard feature rise d2">
+        <div class="pl">At cost</div>
+        <div class="pv">₹18,000</div>
+        <div class="pd">Zero margin. What it costs to make once volume is real — the number a subsidised or grant-funded unit is built on.</div>
+      </div>
+      <div class="pcard rise d3">
+        <div class="pl">Direct</div>
+        <div class="pv">₹24,000</div>
+        <div class="pd">Sold straight to you, thin margin, no distributor. Under ₹1,600/month on standard no-cost EMI.</div>
+      </div>
+      <div class="pcard rise d4">
+        <div class="pl">Typical retail</div>
+        <div class="pv" style="color:var(--muted)">₹50,000</div>
+        <div class="pd">What this category charges today, once brand, distributor and retailer each take their cut.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p class="disclaimer"><b style="color:var(--muted)">This is a design concept, not a product you can buy.</b> No such device is in production and nothing here is for sale. Specifications and prices are engineering estimates from a feasibility study — the display module cost in particular is triangulated from public teardowns and supplier listings, not a confirmed quote.</p>
+    <p style="margin-top:1.4rem">Open hardware · open weights · no subscription</p>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    /* hero draw-in */
+    requestAnimationFrame(function () {
+      document.getElementById('hero').classList.add('drawn');
+      document.querySelectorAll('#hero .rise').forEach(function (el) { el.classList.add('in'); });
+    });
+
+    /* scroll reveals */
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.18, rootMargin: '0px 0px -8% 0px' });
+    document.querySelectorAll('.rise:not(#hero .rise)').forEach(function (el) { io.observe(el); });
+
+    /* count-up numbers */
+    var counted = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        var el = e.target, target = parseInt(el.getAttribute('data-count'), 10);
+        counted.unobserve(el);
+        if (reduce || target === 0) { el.textContent = String(target); return; }
+        var t0 = null, dur = 1250;
+        function step(ts) {
+          if (t0 === null) t0 = ts;
+          var p = Math.min((ts - t0) / dur, 1);
+          el.textContent = String(Math.round(target * (1 - Math.pow(1 - p, 3))));
+          if (p < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+      });
+    }, { threshold: 0.6 });
+    document.querySelectorAll('[data-count]').forEach(function (el) { counted.observe(el); });
+
+    /* exploded view driven by scroll progress */
+    var outer = document.getElementById('explode');
+    var callouts = Array.prototype.slice.call(document.querySelectorAll('.callout'));
+    var ticking = false;
+    function paintExplode() {
+      ticking = false;
+      var r = outer.getBoundingClientRect();
+      var total = outer.offsetHeight - window.innerHeight;
+      if (total <= 0) { callouts.forEach(function (c) { c.classList.add('on'); }); return; }
+      var p = Math.min(Math.max(-r.top / total, 0), 1);
+      var shown = p * (callouts.length + 0.6);
+      callouts.forEach(function (c, i) { c.classList.toggle('on', shown > i + 0.35); });
+    }
+    function onScroll() { if (!ticking) { ticking = true; requestAnimationFrame(paintExplode); } }
+    if (reduce) { callouts.forEach(function (c) { c.classList.add('on'); }); }
+    else { window.addEventListener('scroll', onScroll, { passive: true });
+           window.addEventListener('resize', onScroll); paintExplode(); }
+
+    /* language cycling in the HUD */
+    var lines = [
+      { t: 'आज बारिश होगी, बुवाई मत करो।', n: 'Hindi · हिन्दी', c: 'hi' },
+      { t: 'আজ বৃষ্টি হবে, বীজ বুনবেন না।', n: 'Bengali · বাংলা', c: 'bn' },
+      { t: 'आज पाऊस पडेल, पेरणी करू नका.', n: 'Marathi · मराठी', c: 'mr' },
+      { t: 'ఈ రోజు వర్షం పడుతుంది, విత్తనాలు వేయవద్దు.', n: 'Telugu · తెలుగు', c: 'te' },
+      { t: 'இன்று மழை பெய்யும், விதைக்க வேண்டாம்.', n: 'Tamil · தமிழ்', c: 'ta' },
+      { t: 'ਅੱਜ ਮੀਂਹ ਪਵੇਗਾ, ਬਿਜਾਈ ਨਾ ਕਰੋ।', n: 'Punjabi · ਪੰਜਾਬੀ', c: 'pa' }
+    ];
+    var lineEl = document.getElementById('hudLine'),
+        langEl = document.getElementById('hudLang'),
+        chips  = Array.prototype.slice.call(document.querySelectorAll('.lang-chip'));
+    var idx = 0, timer = null;
+    function mark() {
+      chips.forEach(function (ch) { ch.classList.toggle('live', ch.getAttribute('data-l') === lines[idx].c); });
+    }
+    function cycle() {
+      lineEl.classList.add('fade-out'); langEl.classList.add('fade-out');
+      setTimeout(function () {
+        idx = (idx + 1) % lines.length;
+        lineEl.textContent = lines[idx].t;
+        langEl.textContent = lines[idx].n;
+        mark();
+        lineEl.classList.remove('fade-out'); langEl.classList.remove('fade-out');
+      }, 450);
+    }
+    mark();
+    var hudIO = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting && !timer && !reduce) { timer = setInterval(cycle, 2600); }
+        else if (!e.isIntersecting && timer) { clearInterval(timer); timer = null; }
+      });
+    }, { threshold: 0.35 });
+    hudIO.observe(document.querySelector('.lens'));
+
+    /* let a viewer step through languages by clicking a chip */
+    chips.forEach(function (ch) {
+      ch.style.cursor = 'pointer';
+      ch.addEventListener('click', function () {
+        var want = ch.getAttribute('data-l');
+        for (var i = 0; i < lines.length; i++) { if (lines[i].c === want) { idx = i; break; } }
+        lineEl.textContent = lines[idx].t; langEl.textContent = lines[idx].n; mark();
+      });
+    });
+  })();
+</script>

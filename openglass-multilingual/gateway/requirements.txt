@@ -1,0 +1,28 @@
+# ---- core service ----
+flask>=3.0
+waitress>=3.0
+requests>=2.31
+
+# ---- the display (this is the product) ----
+# HarfBuzz shaping is NOT optional. Without it Telugu and Tamil render as
+# broken glyph soup — we measured it. See drishti/display.py.
+uharfbuzz>=0.39
+freetype-py>=2.4
+Pillow>=10.0
+
+# ---- speech out ----
+piper-tts>=1.6
+
+# ---- speech in ----
+faster-whisper>=1.0
+av>=11.0            # decodes browser audio without a system ffmpeg
+
+# ---- translation ----
+transformers>=4.40
+torch>=2.0
+sentencepiece>=0.2
+
+# ---- PARKED: reading text from photos ----
+# The READ feature is on hold while the display is the focus. Nothing depends
+# on these; install them only if you switch READ back on.
+#   pytesseract>=0.3      (also needs the tesseract binary + language data)
