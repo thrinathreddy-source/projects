@@ -1,299 +1,239 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getSessionSecret } from './lib/sessionSecret'
-import { secureCompare }    from './lib/secureCompare'
+import { NextResponse, type NextRequest } from "next/server";
 
-const COOKIE  = 'oppidx_session'
-const MAX_AGE = 60 * 60 * 24 * 30 * 1000  // 30 days
+// ── Per-IP sliding-window rate limiter (Edge-compatible, in-memory) ──────────
+// This one is deliberately coarse. It runs on every request at the edge, where
+// a database round trip would cost more than it's worth, and its memory is
+// per-instance. So it exists only to absorb obvious floods; the accurate,
+// shared-counter limits that decide real policy live in the route handlers
+// (see rateLimitShared in lib/security.ts). Keep the numbers here well above
+// what a genuine burst looks like, or this silently overrides those limits.
+const windows = new Map<string, { count: number; resetAt: number }>();
+let callsSinceSweep = 0;
 
-/* ── Bot/scanner path block — from Mayatara, applies site-wide ──
-   Blocks obviously malicious probe paths before anything else runs.
-   Note: bare "admin" is deliberately NOT in this list — oppidx has a real
-   /admin route (session-gated below); only WordPress/PHP-scanner-style
-   admin paths are blocked. */
-const BLOCKED_PATH_PATTERNS = [
-  // NOT .xml — that's a legitimate extension the site itself serves
-  // (sitemap.xml, feed.xml), and this pattern was silently 404ing both.
-  /\.(php|asp|aspx|jsp|cgi|env|git|sql|bak|config|yaml|yml|ini|log|sh|bash)$/i,
-  /\/(wp-admin|wp-login|phpmyadmin|manager|console|shell|cmd|eval)/i,
-  /\/(\.env|\.git|\.htaccess|\.well-known\/acme-challenge)/i,
-  /\/(etc\/passwd|proc\/self|windows\/win\.ini)/i,
-]
+function edgeRateLimit(id: string, max: number, windowMs: number): boolean {
+  const now = Date.now();
 
-/* ── In-edge rate limiter (oppidx's own auth endpoints only) ─────────────────
-   Keyed by IP + route.  Max 10 attempts per 15 min window; locks 30 min.
-   Uses globalThis so the Map survives hot-reloads in dev.
-   In production with multiple instances, replace with Redis / KV.        */
-declare global { var __rl: Map<string, { hits: number; since: number; lockUntil: number }> | undefined }
-globalThis.__rl ??= new Map()
-const rl = globalThis.__rl
-
-function edgeRateLimit(key: string): { ok: boolean; retryAfter?: number } {
-  const now    = Date.now()
-  const WINDOW = 15 * 60_000   // 15 min
-  const MAX    = 10
-  const LOCK   = 30 * 60_000   // 30 min lock
-
-  const e = rl.get(key)
-  if (e && now < e.lockUntil) return { ok: false, retryAfter: Math.ceil((e.lockUntil - now) / 1000) }
-  if (!e || now - e.since > WINDOW) { rl.set(key, { hits: 1, since: now, lockUntil: 0 }); return { ok: true } }
-  e.hits++
-  if (e.hits > MAX) { e.lockUntil = now + LOCK; return { ok: false, retryAfter: Math.ceil(LOCK / 1000) } }
-  return { ok: true }
-}
-
-/* ── In-edge rate limiter (Events/Pulse/Match's own /api/* endpoints,
-   formerly Mayatara's) ─────────────────────────────────────────────────────
-   Separate Map/semantics from oppidx's limiter above — kept distinct rather
-   than unified, since the two services' rate-limit shapes differ (this one
-   is a simple fixed-window counter, not a lock-then-cooldown scheme) and
-   conflating them risks behavior drift on either service. */
-declare global { var __mtRl: Map<string, { count: number; resetAt: number }> | undefined }
-globalThis.__mtRl ??= new Map()
-const mtRl = globalThis.__mtRl
-
-function matchServiceRateLimit(id: string, max: number, windowMs: number): boolean {
-  const now = Date.now()
-  const entry = mtRl.get(id)
-  if (!entry || now > entry.resetAt) {
-    mtRl.set(id, { count: 1, resetAt: now + windowMs })
-    return true
+  // Every key (auth:$ip, login:$ip, api:$ip for every distinct IP seen) is
+  // added and never removed once its window expires — on a long-lived edge
+  // instance under real traffic that's an unbounded, slow leak. A cheap
+  // periodic sweep instead of pruning on every call, since this runs on
+  // every request.
+  if (++callsSinceSweep >= 500) {
+    callsSinceSweep = 0;
+    for (const [key, entry] of windows) {
+      if (now > entry.resetAt) windows.delete(key);
+    }
   }
-  if (entry.count >= max) return false
-  entry.count++
-  return true
+
+  const entry = windows.get(id);
+  if (!entry || now > entry.resetAt) {
+    windows.set(id, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  if (entry.count >= max) return false;
+  entry.count++;
+  return true;
 }
 
 function getIP(req: NextRequest): string {
   return (
-    req.headers.get('x-real-ip') ||
-    req.headers.get('x-forwarded-for')?.split(',')[0].trim() ||
-    'anonymous'
-  )
+    req.headers.get("x-real-ip") ||
+    req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
+    "anonymous"
+  );
 }
 
-/* ── Session verification (Web Crypto — Edge safe) ──────────── */
-async function isValidSession(token: string | undefined): Promise<boolean> {
-  if (!token) return false
-  const parts = token.split('.')
-  if (parts.length < 3) return false
-  const sig     = parts.pop()!
-  const payload = parts.join('.')
-
-  const enc = new TextEncoder()
-  const key = await crypto.subtle.importKey(
-    'raw', enc.encode(getSessionSecret()),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false, ['sign'],
-  )
-  const sigBuf   = await crypto.subtle.sign('HMAC', key, enc.encode(payload))
-  const expected = Array.from(new Uint8Array(sigBuf))
-    .map(b => b.toString(16).padStart(2, '0')).join('')
-
-  // Constant-time, matching lib/session.ts — this is the check standing in
-  // front of /admin, and `!==` leaks the signature a byte at a time.
-  if (!secureCompare(sig, expected)) return false
-  const ts = parseInt(parts[1] ?? '0')
-  // NaN fails every comparison, so an unparseable timestamp would have
-  // returned false here anyway — being explicit so it stays that way.
-  if (!Number.isFinite(ts)) return false
-  return Date.now() - ts < MAX_AGE
+// Constant-time string compare (no Buffer — must run in the Edge runtime).
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
 }
 
-/* ── Security headers ───────────────────────────────────────── */
-function applySecurityHeaders(res: NextResponse, req: NextRequest): NextResponse {
-  const isProd = process.env.NODE_ENV === 'production'
+// Origins allowed to call the API. Built from the deployment's own identity so
+// this keeps working no matter what the Vercel project ends up being named.
+function allowedOrigins(): string[] {
+  const list: string[] = [];
+  const add = (u?: string) => { if (u) list.push(u.replace(/\/$/, "")); };
 
-  // /embed/* pages exist specifically to be framed by third-party sites
-  // (see app/embed/opportunity-of-the-day) — the clickjacking protections
-  // below apply to the rest of the site, but blocking framing here would
-  // make the embeddable widget feature literally unusable everywhere,
-  // including its own live preview on /widget.
-  const isEmbeddable = req.nextUrl.pathname.startsWith('/embed/')
+  add(process.env.NEXT_PUBLIC_APP_URL);
+  // Set automatically by Vercel: the stable production domain, and this
+  // specific deployment's URL (which is what preview deployments send).
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) add(`https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`);
+  if (process.env.VERCEL_URL) add(`https://${process.env.VERCEL_URL}`);
+  // Same hardcoded fallback lib/seo.ts uses for SITE. Without it, an
+  // environment where none of the above resolve to the live custom domain
+  // (non-Vercel hosting, a misconfigured project) makes every legitimate
+  // same-origin browser POST — register, feedback, report, grievance, all of
+  // which send an Origin header — get rejected with 403, while SEO output
+  // silently keeps pointing at the right domain and masks the misconfig.
+  add("https://www.themayatara.com");
 
-  // Prevent MIME-type sniffing
-  res.headers.set('X-Content-Type-Options', 'nosniff')
+  return list;
+}
 
-  // Prevent clickjacking (except the pages meant to be embedded — see above)
-  if (!isEmbeddable) {
-    res.headers.set('X-Frame-Options', 'DENY')
+export function proxy(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+  const ip = getIP(req);
+  const method = req.method;
+
+  // Our own generated metadata files. These must be checked before the
+  // blocklist below, which rejects anything ending in .xml — sitemap.xml
+  // included, which silently 404'd it for crawlers.
+  const isPublicMetadata = pathname === "/sitemap.xml" || pathname === "/robots.txt";
+
+  // ── Block obviously malicious paths ────────────────────────────────────────
+  // /.well-known/acme-challenge is NOT in this list: it's a reserved path
+  // (RFC 8615) used for HTTP-01 domain validation. Vercel's own cert flow
+  // doesn't route through here, but anything that ever needs to serve a
+  // validation token through the app (a CDN/WAF in front, a partner
+  // integration) would have TLS renewal silently break against a 404 here.
+  const blocked = [
+    /\.(php|asp|aspx|jsp|cgi|env|git|sql|bak|config|xml|yaml|yml|ini|log|sh|bash)$/i,
+    /\/(wp-admin|wp-login|phpmyadmin|admin|manager|console|shell|cmd|eval)/i,
+    /\/(\.env|\.git|\.htaccess)/i,
+    /\/(etc\/passwd|proc\/self|windows\/win\.ini)/i,
+  ];
+  if (!isPublicMetadata && blocked.some(r => r.test(pathname))) {
+    return new NextResponse(null, { status: 404 });
   }
 
-  // Stop browsers from sending Referer to external sites
-  res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
+  // ── Rate limits (per IP) ───────────────────────────────────────────────────
+  // Auth endpoints. 10 per 15 minutes was the binding constraint on signups —
+  // it sits in front of /api/auth/register, so a shared campus or office
+  // address hit it long before the route's own limit mattered. Raised to a
+  // flood ceiling; the real per-IP signup policy is enforced in the route.
+  if (pathname.startsWith("/api/auth/") && method === "POST") {
+    if (!edgeRateLimit(`auth:${ip}`, 60, 15 * 60_000)) {
+      return new NextResponse(
+        JSON.stringify({ error: "Too many attempts. Try again in 15 minutes." }),
+        { status: 429, headers: { "Content-Type": "application/json", "Retry-After": "900" } }
+      );
+    }
+  }
 
-  // Disable sensitive browser features
+  // NOTE: this never actually fires. app/login/page.tsx calls
+  // supabase.auth.signInWithPassword() directly from the browser against
+  // Supabase's own auth API — it never POSTs to this app's /login, and no
+  // app/api/auth/login route exists either. Credential-stuffing protection on
+  // sign-in is therefore whatever Supabase's own project-level rate limits
+  // provide, not this. Left in place (harmless) in case a server-side login
+  // route is ever added, but don't treat login as rate-limited here.
+  if (pathname === "/login" && method === "POST") {
+    if (!edgeRateLimit(`login:${ip}`, 8, 10 * 60_000)) {
+      return new NextResponse(
+        JSON.stringify({ error: "Too many login attempts. Try again in 10 minutes." }),
+        { status: 429, headers: { "Content-Type": "application/json", "Retry-After": "600" } }
+      );
+    }
+  }
+
+  // All API routes: general limit. Also raised for shared NAT — the signup
+  // funnel alone (register, interview, profile save) is several calls per
+  // person, so 60/min was roughly a dozen simultaneous users on one address.
+  if (pathname.startsWith("/api/")) {
+    if (!edgeRateLimit(`api:${ip}`, 300, 60_000)) {
+      return new NextResponse(
+        JSON.stringify({ error: "Too many requests." }),
+        { status: 429, headers: { "Content-Type": "application/json", "Retry-After": "60" } }
+      );
+    }
+  }
+
+  // ── Cron endpoint: server-to-server only ───────────────────────────────────
+  // Vercel Cron cannot send custom headers — it sends `Authorization: Bearer
+  // $CRON_SECRET`. The x-cron-secret form is kept so the job can still be
+  // triggered by hand with curl.
+  if (pathname === "/api/match/find") {
+    const expected = process.env.CRON_SECRET || "";
+    const bearer = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+    const custom = req.headers.get("x-cron-secret") || "";
+    const ok = expected.length > 0 && (safeEqual(bearer, expected) || safeEqual(custom, expected));
+    if (!ok) {
+      return new NextResponse(null, { status: 401 });
+    }
+  }
+
+  // ── Block requests with no User-Agent (raw bots/scanners) ─────────────────
+  if (pathname.startsWith("/api/") && !req.headers.get("user-agent")) {
+    return new NextResponse(null, { status: 400 });
+  }
+
+  // ── CORS: API only accepts requests from our own deployments ───────────────
+  const origin = req.headers.get("origin");
+  if (pathname.startsWith("/api/") && origin) {
+    const isOwnOrigin = allowedOrigins().includes(origin.replace(/\/$/, ""));
+    const isLocalhost = process.env.NODE_ENV !== "production" &&
+      /^http:\/\/localhost(:\d+)?$/.test(origin);
+    if (!isOwnOrigin && !isLocalhost) {
+      return new NextResponse(null, { status: 403 });
+    }
+  }
+
+  // ── Apply security headers to every response ───────────────────────────────
+  const res = NextResponse.next();
+
+  // Strict Transport Security — force HTTPS for 2 years
+  res.headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
+
+  // Prevent clickjacking
+  res.headers.set("X-Frame-Options", "DENY");
+
+  // Prevent MIME sniffing
+  res.headers.set("X-Content-Type-Options", "nosniff");
+
+  // Referrer policy — don't leak URL to third parties
+  res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+
+  // Permissions policy — disable everything not needed
   res.headers.set(
-    'Permissions-Policy',
-    'camera=(), microphone=(), geolocation=(), payment=(), usb=(), bluetooth=()',
-  )
+    "Permissions-Policy",
+    "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+  );
 
-  // Force HTTPS in production
-  if (isProd) {
-    res.headers.set(
-      'Strict-Transport-Security',
-      'max-age=63072000; includeSubDomains; preload',
-    )
-  }
+  // XSS protection (legacy browsers)
+  res.headers.set("X-XSS-Protection", "1; mode=block");
 
   // Content Security Policy
-  // • script-src includes 'unsafe-eval' ONLY outside production. `next dev`
-  //   needs it (HMR and the dev overlay eval their module payloads), but a
-  //   production bundle does not, and shipping it live hands any injected
-  //   string the ability to become executable code — which is most of what
-  //   a CSP is there to prevent. Dev-only, so the local console stays clean
-  //   without weakening the deployed policy.
-  // • script-src includes 'unsafe-inline' because Next.js injects inline scripts
-  // • style-src includes 'unsafe-inline' because Framer Motion uses inline styles
-  // • script-src/connect-src/frame-src include Razorpay's domains because /submit
-  //   loads their Checkout.js widget, which opens a payment iframe and talks to
-  //   their API directly from the browser — without these the widget silently
-  //   fails to load once live Razorpay keys are configured.
-  // • script-src/connect-src include va.vercel-scripts.com for Vercel Analytics —
-  //   in production on Vercel it loads via a same-origin proxied path ('self'
-  //   covers it), but `next dev` falls back to this direct host, so it's needed
-  //   for a clean local console too.
-  // • connect-src also includes Supabase/Anthropic/OpenAI origins for the
-  //   Events/Pulse/Match features (client-side Supabase calls, AI-assisted
-  //   matching/interview under /events, /pulse, /match and their APIs).
-  // • Tighten further once you move to a CDN / nonces
-  const csp = [
-    "default-src 'self'",
-    `script-src 'self' 'unsafe-inline'${isProd ? '' : " 'unsafe-eval'"} https://checkout.razorpay.com https://va.vercel-scripts.com`,
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' https://fonts.gstatic.com",
-    "img-src 'self' data: blob: https:",
-    "connect-src 'self' https://api.razorpay.com https://checkout.razorpay.com https://lumberjack.razorpay.com https://va.vercel-scripts.com https://vitals.vercel-insights.com https://*.supabase.co wss://*.supabase.co https://api.anthropic.com https://api.openai.com",
-    // 'self' is required so /widget can preview the embeddable badge — with
-    // only the Razorpay origins listed, frame-src is a full override of
-    // default-src (no implicit 'self' fallback once it's specified), which
-    // silently blocked the site from framing even its own pages. The apex
-    // host is listed explicitly too: 'self' resolves to the exact enforcing
-    // origin (www.oppidx.com), but SITE_URL (used to build the embed's src)
-    // is the bare apex, which 301s to www — a different origin as far as
-    // CSP's frame-src matching is concerned, checked before the redirect.
-    "frame-src 'self' https://oppidx.com https://api.razorpay.com https://checkout.razorpay.com",
-    isEmbeddable ? "frame-ancestors *" : "frame-ancestors 'none'",
-    "base-uri 'self'",
-    "form-action 'self'",
-  ].join('; ')
-  res.headers.set('Content-Security-Policy', csp)
+  //
+  // @vercel/analytics and @vercel/speed-insights both load their script from
+  // va.vercel-scripts.com in development and from same-origin
+  // /_vercel/{insights,speed-insights}/script.js everywhere else (see
+  // getScriptSrc in each package). So the exception they need is a
+  // development-only one, and production keeps the strict script-src.
+  const isDev = process.env.NODE_ENV !== "production";
+  const scriptSrc = [
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",   // Next.js needs these
+    isDev ? "https://va.vercel-scripts.com" : "",
+  ].join(" ").trim();
+
+  res.headers.set(
+    "Content-Security-Policy",
+    [
+      "default-src 'self'",
+      scriptSrc,
+      // Fonts are self-hosted by next/font now — nothing loads from Google.
+      "style-src 'self' 'unsafe-inline'",
+      "font-src 'self' data:",
+      "img-src 'self' data: blob:",
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.anthropic.com https://api.openai.com",
+      "frame-ancestors 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "upgrade-insecure-requests",
+    ].join("; ")
+  );
 
   // Remove fingerprinting headers
-  res.headers.delete('X-Powered-By')
-  res.headers.delete('Server')
+  res.headers.delete("X-Powered-By");
+  res.headers.delete("Server");
 
-  return res
-}
-
-/* ── Proxy (formerly "Middleware" — renamed in Next.js 16) ───── */
-const AUTH_ROUTES = ['/api/auth/login', '/api/auth/register']
-// Events/Pulse/Match's own API prefixes — formerly all under one
-// /api/mayatara/* prefix when they were a separately-branded product; now
-// split across their own top-level API namespaces post-merge.
-const MATCH_SERVICE_PREFIXES = ['/api/events/', '/api/pulse/live/', '/api/match/']
-const MATCH_SERVICE_CRON_ROUTES = ['/api/match/find', '/api/pulse/live/refresh']
-
-export async function proxy(req: NextRequest) {
-  const { pathname } = req.nextUrl
-
-  /* ── Bot/scanner path block — before anything else ── */
-  if (BLOCKED_PATH_PATTERNS.some(r => r.test(pathname))) {
-    return new NextResponse(null, { status: 404 })
-  }
-
-  /* ── Rate-limit oppidx's own auth POST endpoints ── */
-  if (AUTH_ROUTES.some(r => pathname.startsWith(r)) && req.method === 'POST') {
-    // getIP() rather than reading x-forwarded-for[0] directly — see lib/ip.ts:
-    // the left-most forwarded entry is client-supplied, so keying the login
-    // limiter off it let an attacker rotate a fake IP per request and never
-    // hit the 10-attempt lock.
-    const ip = getIP(req)
-    const rlResult = edgeRateLimit(`${ip}:${pathname}`)
-    if (!rlResult.ok) {
-      return new NextResponse(
-        JSON.stringify({ error: `Too many attempts. Try again in ${rlResult.retryAfter}s.` }),
-        {
-          status: 429,
-          headers: {
-            'Content-Type': 'application/json',
-            'Retry-After':  String(rlResult.retryAfter),
-            'X-Content-Type-Options': 'nosniff',
-          },
-        },
-      )
-    }
-  }
-
-  /* ── Rate-limit Events/Pulse/Match's own API endpoints (formerly all
-     under one /api/mayatara/* prefix) ──
-     Auth routes: strict (10/15min). Everything else under these prefixes:
-     general limit (60/60s). Scoped so oppidx's own /api/* is unaffected. */
-  if (MATCH_SERVICE_PREFIXES.some(p => pathname.startsWith(p))) {
-    const ip = getIP(req)
-
-    if (pathname.startsWith('/api/match/auth/') && req.method === 'POST') {
-      if (!matchServiceRateLimit(`mt-auth:${ip}`, 10, 15 * 60_000)) {
-        return new NextResponse(
-          JSON.stringify({ error: 'Too many attempts. Try again in 15 minutes.' }),
-          { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': '900' } },
-        )
-      }
-    }
-
-    if (!matchServiceRateLimit(`mt-api:${ip}`, 60, 60_000)) {
-      return new NextResponse(
-        JSON.stringify({ error: 'Too many requests.' }),
-        { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': '60' } },
-      )
-    }
-
-    /* Cron endpoints: server-to-server only, shared-secret gated — same
-       Authorization: Bearer CRON_SECRET convention Vercel Cron sends
-       natively (see vercel.json), which the route handlers themselves
-       also check; this is just an earlier rejection at the edge. */
-    if (MATCH_SERVICE_CRON_ROUTES.includes(pathname)) {
-      const auth = req.headers.get('authorization')
-      const expected = process.env.CRON_SECRET
-      if (!expected || auth !== `Bearer ${expected}`) {
-        return new NextResponse(null, { status: 401 })
-      }
-    }
-
-    /* Block requests with no User-Agent (raw bots/scanners) */
-    if (!req.headers.get('user-agent')) {
-      return new NextResponse(null, { status: 400 })
-    }
-  }
-
-  /* ── Protected paths — session required ──
-     OppIDX is a public opportunities board: everything is open by default,
-     including nonexistent/mistyped URLs (which should fall through to
-     Next.js's normal 404, not get redirected to /auth). Only /admin itself
-     needs a session — this used to be an ever-growing allowlist of "public"
-     prefixes that defaulted to *protected* for anything not listed, which
-     silently 302'd every unknown path (typos, bad links, new routes we
-     forgot to add here) to the admin login screen instead of 404ing.
-     The shared Supabase login (the tab on /account) is entirely client-side and
-     isn't gated here — it never matched this check anyway. ── */
-  const isProtected = pathname === '/admin' || pathname.startsWith('/admin/')
-
-  const session = req.cookies.get(COOKIE)?.value
-
-  if (isProtected) {
-    const authed = await isValidSession(session)
-    if (!authed) {
-      const url = req.nextUrl.clone()
-      url.pathname = '/auth'
-      url.searchParams.set('from', pathname)
-      const redirect = NextResponse.redirect(url)
-      return applySecurityHeaders(redirect, req)
-    }
-  }
-
-  const res = NextResponse.next()
-  return applySecurityHeaders(res, req)
+  return res;
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
-}
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico).*)",
+  ],
+};
