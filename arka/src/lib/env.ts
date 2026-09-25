@@ -56,6 +56,13 @@ const serverSchema = z.object({
 
   RESEND_API_KEY: z.string().default(""),
   EMAIL_FROM: z.string().default("Arka <onboarding@resend.dev>"),
+
+  /**
+   * Optional second reader for request text, in every language. Unset, the
+   * word lists in `moderation.ts` are the only input check — and they cannot
+   * read a narration script written in Tamil or Devanagari.
+   */
+  OPENAI_API_KEY: z.string().default(""),
 });
 
 function loadServerEnv() {

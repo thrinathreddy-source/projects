@@ -10,7 +10,7 @@ export async function resetDatabase() {
       "credit_ledger", "generation", "job", "video", "project",
       "transaction", "subscription", "api_key", "feedback",
       "audit_log", "system_log", "render_cache", "daily_spend", "review_item",
-      "waitlist_entry",
+      "waitlist_entry", "grievance",
       "app_setting", "api_rate_limit", "session", "account", "user"
     RESTART IDENTITY CASCADE
   `);

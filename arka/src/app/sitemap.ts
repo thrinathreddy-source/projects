@@ -21,6 +21,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       // Indexed deliberately: the grievance route has to be findable by someone
       // who has a complaint and no account, which is the point of publishing it.
       { path: "/acceptable-use", priority: 0.4, changeFrequency: "yearly" },
+      { path: "/grievance", priority: 0.4, changeFrequency: "yearly" },
       { path: "/terms", priority: 0.3, changeFrequency: "yearly" },
       { path: "/privacy", priority: 0.3, changeFrequency: "yearly" },
       { path: "/refunds", priority: 0.3, changeFrequency: "yearly" },

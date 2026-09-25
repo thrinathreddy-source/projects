@@ -104,7 +104,7 @@ export async function create(
   // Before anything is reserved or queued. A refusal must cost the user
   // nothing, and must not leave a project row behind describing what they
   // asked for.
-  enforceModeration(input, user.id);
+  const screened = await enforceModeration(input, user.id);
 
   const plan = await planFor(user.planCode);
 
@@ -219,7 +219,7 @@ export async function create(
 
   // Not a gate — the render proceeds either way. This only asks a person to
   // look afterwards at the cases a binary filter has to guess about.
-  await flagForReview(input, { userId: user.id, projectId: project.id });
+  await flagForReview(input, { userId: user.id, projectId: project.id }, screened.review);
 
   logger.info("queue", `Queued project ${project.id}`, {
     userId: user.id,
@@ -299,7 +299,7 @@ export async function animate(
   // this catches a different case: a rule added *after* a project was made.
   // Motion is the expensive, shareable artifact — the last gate before
   // something exists that can be downloaded and posted.
-  enforceModeration(project, user.id);
+  await enforceModeration(project, user.id);
 
   if (!project.stillKey) {
     throw new AppError("CONFLICT", "There is no still to animate yet.");
@@ -372,7 +372,7 @@ export async function requestFinal(
   // this catches a different case: a rule added *after* a project was made.
   // Motion is the expensive, shareable artifact — the last gate before
   // something exists that can be downloaded and posted.
-  enforceModeration(project, user.id);
+  await enforceModeration(project, user.id);
 
   const plan = await planFor(user.planCode);
   if (!plan.allowFinal) {

@@ -24,8 +24,10 @@ export default function proxy(request: NextRequest) {
   if (isComingSoon()) {
     const allowed =
       PUBLIC_WHILE_CLOSED.includes(pathname) ||
-      // The waitlist is the point of the page; health is for the monitor.
+      // The waitlist is the point of the page; health is for the monitor;
+      // the grievance route must stay reachable whether or not we are open.
       pathname === "/api/waitlist" ||
+      pathname === "/api/grievances" ||
       pathname === "/api/health";
 
     if (!allowed) {

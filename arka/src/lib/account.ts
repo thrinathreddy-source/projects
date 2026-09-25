@@ -39,7 +39,7 @@ export async function exportAccountData(userId: string) {
 
   if (!user) throw notFound("Account not found.");
 
-  const [projects, ledger, transactions, generations, apiKeys, feedback] =
+  const [projects, ledger, transactions, generations, apiKeys, feedback, grievances] =
     await Promise.all([
       db.project.findMany({
         where: { userId },
@@ -86,6 +86,17 @@ export async function exportAccountData(userId: string) {
         where: { userId },
         select: { message: true, rating: true, page: true, createdAt: true },
       }),
+      // Complaints filed while signed in. The hashed IP is ours, not theirs.
+      db.grievance.findMany({
+        where: { userId },
+        orderBy: { createdAt: "asc" },
+        select: {
+          reference: true, category: true, name: true, email: true,
+          message: true, contentUrl: true, status: true, dueAt: true,
+          acknowledgedAt: true, resolution: true, resolvedAt: true,
+          createdAt: true,
+        },
+      }),
     ]);
 
   return {
@@ -100,6 +111,7 @@ export async function exportAccountData(userId: string) {
     generations,
     apiKeys,
     feedback,
+    grievances,
   };
 }
 
@@ -130,9 +142,14 @@ export type DeletionOutcome = {
  *             sessions and OAuth links, so access ends immediately
  *             API keys
  *             feedback (free text, may contain anything)
+ *             closed grievances' contact details and text, and the link to
+ *             this account on every grievance
  *   scrubbed  name, email, image on the user row
  *   retained  transactions, credit ledger, generation analytics — none of
  *             which carry PII once the user row is anonymised
+ *             open grievances' contents: the person asked us to act on
+ *             them, and deleting the address would leave no way to answer
+ *             a complaint that is still on a legal deadline
  *
  * Irreversible. The caller is responsible for confirming intent.
  */
@@ -229,6 +246,14 @@ export async function deleteAccount(
     await tx.account.deleteMany({ where: { userId } });
     await tx.apiKey.deleteMany({ where: { userId } });
     await tx.feedback.deleteMany({ where: { userId } });
+
+    // A closed complaint keeps its category, dates and outcome — the record
+    // that it was answered — but not who made it or what they wrote.
+    await tx.grievance.updateMany({
+      where: { userId, status: { not: "OPEN" } },
+      data: { name: null, email: "", message: "", contentUrl: null, ipHash: null },
+    });
+    await tx.grievance.updateMany({ where: { userId }, data: { userId: null } });
 
     await tx.user.update({
       where: { id: userId },

@@ -1,6 +1,5 @@
 import { ok, handler } from "@/lib/api";
-import { AppError } from "@/lib/errors";
-import { env } from "@/lib/env";
+import { assertCronRequest } from "@/lib/cron-auth";
 import { runTick } from "@/lib/worker";
 
 /**
@@ -22,12 +21,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export const GET = handler("worker", async (request: Request) => {
-  const authorization = request.headers.get("authorization");
-
-  // Vercel Cron sends `Authorization: Bearer <CRON_SECRET>`.
-  if (authorization !== `Bearer ${env().CRON_SECRET}`) {
-    throw new AppError("FORBIDDEN", "Invalid cron credentials.");
-  }
+  assertCronRequest(request);
 
   const result = await runTick(`cron-${crypto.randomUUID().slice(0, 8)}`);
   return ok(result);

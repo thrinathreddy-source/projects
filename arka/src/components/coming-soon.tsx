@@ -118,6 +118,7 @@ export function ComingSoon({ promise }: { promise: string }) {
           <a href="/terms" className="hover:text-foreground">Terms</a>
           <a href="/privacy" className="hover:text-foreground">Privacy</a>
           <a href="/acceptable-use" className="hover:text-foreground">Acceptable use</a>
+          <a href="/grievance" className="hover:text-foreground">Report a problem</a>
           <a href="/contact" className="hover:text-foreground">Contact</a>
         </footer>
       </div>
