@@ -56,6 +56,11 @@ export const RATE_LIMITS = {
    * that the only public write endpoint on a closed site is not a free-for-all.
    */
   "waitlist.join": { limit: 10, windowSec: 600 },
+  /**
+   * Grievances, by IP — unauthenticated for the same reason. Generous, because
+   * turning away a genuine safety report is far worse than a few junk ones.
+   */
+  "grievance.submit": { limit: 10, windowSec: 3600 },
   /** Assembling an export touches every table; it is not a hot path. */
   "account.export": { limit: 5, windowSec: 3600 },
   /** Erasure is irreversible, so this bounds a scripted mistake. */

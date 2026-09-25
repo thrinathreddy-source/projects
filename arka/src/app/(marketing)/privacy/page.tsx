@@ -4,7 +4,7 @@ import { COMPANY, registeredAddressLine } from "@/lib/company";
 
 export const metadata: Metadata = { title: "Privacy Policy" };
 
-const UPDATED = "7 August 2026";
+const UPDATED = "25 September 2026";
 
 export default function PrivacyPage() {
   return (
@@ -36,6 +36,7 @@ export default function PrivacyPage() {
       <p>Only the processors we need to run Arka:</p>
       <ul>
         <li><strong>AI model providers</strong> (currently fal.ai) — receive your prompt in order to render the video.</li>
+        <li><strong>OpenAI</strong> — when enabled, reads the title, prompt and narration you submit to check them against our content rules, before anything is generated.</li>
         <li><strong>Cloudflare R2</strong> — stores the generated files.</li>
         <li><strong>Razorpay</strong> — processes payments.</li>
         <li><strong>Vercel</strong> — hosts the application.</li>
@@ -60,6 +61,7 @@ export default function PrivacyPage() {
         <li><strong>Project records</strong> — retained after deletion in reduced form, so our credit and cost history stays consistent. The video files themselves are deleted.</li>
         <li><strong>Billing records</strong> — retained as long as tax law requires, typically eight years in India.</li>
         <li><strong>Server logs</strong> — <Fill value={COMPANY.logRetention}>retention period</Fill>.</li>
+        <li><strong>Complaints</strong> made through our <a href="/grievance">complaint form</a> — kept as the record that they were answered. If you close your account, your name, email and message are removed from complaints you filed while signed in, once they are closed.</li>
       </ul>
 
       <h2>Your rights</h2>
@@ -67,7 +69,8 @@ export default function PrivacyPage() {
         You can access and correct your details in <a href="/settings">Settings</a>,
         and delete any project from its page. To request a copy of your data or
         deletion of your account, write to <Fill value={COMPANY.email.privacy}>privacy@yourdomain.com</Fill>. We
-        respond within 30 days.
+        respond within 30 days. You can also make the request through our{" "}
+        <a href="/grievance">complaint form</a>, which gives it a reference number.
       </p>
       <p>
         Depending on where you live, you may have additional rights under India&rsquo;s

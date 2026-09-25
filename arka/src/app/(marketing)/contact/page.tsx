@@ -4,7 +4,7 @@ import { COMPANY } from "@/lib/company";
 
 export const metadata: Metadata = { title: "Contact" };
 
-const UPDATED = "7 August 2026";
+const UPDATED = "25 September 2026";
 
 export default function ContactPage() {
   return (
@@ -21,6 +21,13 @@ export default function ContactPage() {
         <li><strong>Privacy requests</strong> — <Fill value={COMPANY.email.privacy}>privacy@yourdomain.com</Fill></li>
         <li><strong>Abuse reports</strong> — <Fill value={COMPANY.email.abuse}>abuse@yourdomain.com</Fill></li>
       </ul>
+
+      <h2>Complaints and data requests</h2>
+      <p>
+        To report a video, or to ask about your personal data, use the{" "}
+        <a href="/grievance">complaint form</a>. It gives you a reference number
+        and tells you when to expect a decision.
+      </p>
 
       <h2>Registered address</h2>
       <p>

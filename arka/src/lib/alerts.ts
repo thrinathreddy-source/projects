@@ -3,6 +3,7 @@ import { env } from "@/lib/env";
 import { getSettings } from "@/lib/settings";
 import { budgetStatus } from "@/lib/budget";
 import { sendMail } from "@/lib/mailer";
+import { grievanceClock } from "@/lib/grievances";
 import { logger } from "@/lib/logger";
 
 /**
@@ -215,8 +216,61 @@ async function errorSpike(): Promise<Signal | null> {
   };
 }
 
+/**
+ * Complaints on the legal clock.
+ *
+ * Not a system failure, but the same shape as one: nothing looks wrong from
+ * the dashboard while a deadline quietly passes. A grievance whose
+ * notification bounced would otherwise be found only by someone opening the
+ * admin page — so the deadlines are watched here, alongside everything else
+ * that must not be missed.
+ */
+async function grievances(): Promise<Signal[]> {
+  const clock = await grievanceClock();
+  const signals: Signal[] = [];
+
+  if (clock.overdue > 0) {
+    signals.push({
+      key: "grievance.overdue",
+      severity: "critical",
+      summary: `${clock.overdue} grievance(s) past their deadline`,
+      detail:
+        `Open complaints whose resolution deadline has passed. Each deadline ` +
+        `is set at or inside the legal one, so a miss here may already be a ` +
+        `breach. Close them from Admin → Grievances with a written outcome.`,
+    });
+  }
+
+  if (clock.dueSoon > 0) {
+    signals.push({
+      key: "grievance.dueSoon",
+      severity: "critical",
+      summary: `${clock.dueSoon} grievance(s) due within 12 hours`,
+      detail:
+        `Open complaints that reach their deadline in the next 12 hours. The ` +
+        `shortest deadline is 24 hours from filing, so this can be the first ` +
+        `anybody hears of one if its notification did not arrive.`,
+    });
+  }
+
+  if (clock.unacknowledged > 0) {
+    signals.push({
+      key: "grievance.unacknowledged",
+      severity: "critical",
+      summary: `${clock.unacknowledged} grievance(s) not yet acknowledged`,
+      detail:
+        `The automatic acknowledgement did not reach these complainants, and ` +
+        `every complaint must be acknowledged within 24 hours of filing. Write ` +
+        `to them, then mark them acknowledged in Admin → Grievances.`,
+    });
+  }
+
+  return signals;
+}
+
 export async function collectSignals(): Promise<Signal[]> {
-  const checks = await Promise.all([
+  const [grievanceSignals, ...checks] = await Promise.all([
+    grievances(),
     stalledQueue(),
     abandonedJobs(),
     failureRate(),
@@ -226,7 +280,7 @@ export async function collectSignals(): Promise<Signal[]> {
   ]);
 
   const order: Record<Severity, number> = { critical: 0, warn: 1 };
-  return checks
+  return [...checks, ...grievanceSignals]
     .filter((signal): signal is Signal => signal !== null)
     .sort((a, b) => order[a.severity] - order[b.severity]);
 }
@@ -286,14 +340,25 @@ export async function runAlerts(): Promise<AlertRun> {
 
   if (toMail.length > 0 && recipients.length > 0) {
     const critical = toMail.some((signal) => signal.severity === "critical");
+    // A complaint on a deadline is urgent without anything being broken, and
+    // the mail should not claim otherwise.
+    const onlyGrievances = toMail.every((signal) => signal.key.startsWith("grievance."));
 
     await sendMail({
       to: recipients.join(", "),
-      subject: `${critical ? "[Arka] Something is broken" : "[Arka] Worth a look"}: ${toMail[0].summary}`,
+      subject: `${
+        onlyGrievances
+          ? "[Arka] A complaint needs you"
+          : critical
+            ? "[Arka] Something is broken"
+            : "[Arka] Worth a look"
+      }: ${toMail[0].summary}`,
       text: [
-        critical
-          ? "One or more things are wrong that stop videos being produced."
-          : "Nothing is broken, but this is worth knowing about.",
+        onlyGrievances
+          ? "A complaint is on a legal deadline. Nothing is broken, but this cannot wait."
+          : critical
+            ? "One or more things are wrong that need attention now."
+            : "Nothing is broken, but this is worth knowing about.",
         "",
         ...toMail.flatMap((signal) => [
           `${signal.severity.toUpperCase()} — ${signal.summary}`,

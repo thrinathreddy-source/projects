@@ -1,6 +1,5 @@
 import { ok, handler } from "@/lib/api";
-import { AppError } from "@/lib/errors";
-import { env } from "@/lib/env";
+import { assertCronRequest } from "@/lib/cron-auth";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 
@@ -15,9 +14,7 @@ export const maxDuration = 60;
  * card lapsed three weeks ago is not still on a paid plan.
  */
 export const GET = handler("billing", async (request: Request) => {
-  if (request.headers.get("authorization") !== `Bearer ${env().CRON_SECRET}`) {
-    throw new AppError("FORBIDDEN", "Invalid cron credentials.");
-  }
+  assertCronRequest(request);
 
   // A grace window past the period end, so a renewal that is merely slow does
   // not lock somebody out of the plan they are paying for.

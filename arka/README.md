@@ -60,7 +60,7 @@ playback, download, credit settlement. Set `FAL_KEY` and
 
 ```
 prisma/
-  schema.prisma            22 models: auth, projects, jobs, credits, money, ops
+  schema.prisma            25 models: auth, projects, jobs, credits, money, ops
                            (see the data-model table below)
   migrations/              SQL, applied with `prisma migrate deploy`
   seed.ts                  Plan catalog
@@ -233,6 +233,15 @@ never topics: "Shiva" is the product working, "Shiva" beside a slur is not. The
 filter is a floor and is documented as one; `/acceptable-use`, the audit log and
 the admin takedown are what handle everyone it does not stop.
 
+Those rules are word lists, and they only read English and romanised names.
+Arka takes requests in twelve languages and speaks the narration aloud, with no
+safety negatives or output classifier on the audio — so a script in Tamil or
+Devanagari used to reach the voice model unread. `src/lib/moderation-ai.ts`
+adds a second reader, OpenAI's moderation model, when `OPENAI_API_KEY` is set.
+It refuses only sexual content and threats against a group, sends threats and
+graphic violence to the review queue, and ignores plain violence, because the
+canon is Kurukshetra. It fails open: an outage there must not stop every render.
+
 ### Guard rails
 
 - **Daily spend cap** — provider spend is charged against a per-UTC-day counter
@@ -268,6 +277,22 @@ minus payment fees, minus provider cost, minus amortised storage and bandwidth,
 divided by minutes of finished video. If that is positive, growth is safe. If it
 is not, growth is just a faster way to run out of money.
 
+### Complaints
+
+`/grievance` is the complaint route the IT Rules 2021 require, as a form rather
+than only an address, and it works signed out: the person with a complaint about
+a video has usually never heard of Arka. Every complaint gets a reference and a
+deadline set by its category (`src/lib/grievance-catalog.ts`) — 24 hours for a
+likeness, a deepfake or sexual content, 72 for other takedown requests, 15 days
+for everything else, each at or inside the legal limit. Confirm them with
+counsel before launch.
+
+The row is the record; mail is only notification. The complainant's
+acknowledgement is recorded only when the mail provider accepted it, and
+`alerts.ts` mails the admins about anything unacknowledged after 12 hours, due
+within 12, or overdue. Admin → Grievances closes each one with a written reason
+that is sent to the complainant.
+
 ### Knowing when it breaks
 
 `alerts.ts` watches for a stalled queue, a provider refusing everything, a
@@ -288,7 +313,7 @@ table is the only reason the question can be answered at all.
 
 ### Data model
 
-22 tables. The ones that matter:
+25 tables. The ones that matter:
 
 | Table | Why it exists |
 | --- | --- |
@@ -305,6 +330,7 @@ table is the only reason the question can be answered at all.
 | `provider_health` | Failure backoff per vendor |
 | `app_setting` | Runtime-tunable pricing, caps and kill switches |
 | `api_rate_limit` | Per-user request counters. Ours; `rate_limit` is Better Auth's |
+| `grievance` | A complaint, its deadline, and what was decided |
 | `audit_log` / `system_log` / `feedback` | Ops |
 
 ### API
@@ -334,6 +360,8 @@ response ever reaches a client.
 | `GET /api/billing/invoices/[id]` | The customer's own GST invoice |
 | `POST /api/admin/refunds` | Return money and claw back credits, together |
 | `GET /api/health` | For an external monitor. Unauthenticated, deliberately dull |
+| `POST /api/grievances` | File a complaint. Unauthenticated, limited by IP |
+| `POST /api/admin/grievances/[id]` | Acknowledge, resolve or dismiss a complaint |
 | `GET /api/cron/worker` | Scheduled queue tick |
 | `GET /api/cron/retention` | Nightly storage and log housekeeping |
 | `POST /api/admin/users/[id]` | Ban / unban / adjust credits |
@@ -379,6 +407,10 @@ apply identically; there is no second code path with different rules.
    `maxDuration = 60`. If your plan allows more and you want longer renders in
    one tick, raise `WORKER_TICK_BUDGET_MS` to match — the worker stops on its
    own clock, so raising `maxDuration` alone buys nothing.
+
+9. **Content screening** — optional but recommended before selling in Indian
+   languages: set `OPENAI_API_KEY` so request text in any script is screened.
+   Without it, only the English word lists run.
 
 ### Before taking real money
 

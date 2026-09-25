@@ -1,6 +1,5 @@
 import { ok, handler } from "@/lib/api";
-import { AppError } from "@/lib/errors";
-import { env } from "@/lib/env";
+import { assertCronRequest } from "@/lib/cron-auth";
 import { runAlerts } from "@/lib/alerts";
 
 /**
@@ -15,11 +14,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export const GET = handler("alerts", async (request: Request) => {
-  const authorization = request.headers.get("authorization");
-
-  if (authorization !== `Bearer ${env().CRON_SECRET}`) {
-    throw new AppError("FORBIDDEN", "Invalid cron credentials.");
-  }
+  assertCronRequest(request);
 
   return ok(await runAlerts());
 });

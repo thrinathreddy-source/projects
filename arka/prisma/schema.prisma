@@ -63,6 +63,7 @@ model User {
   feedback      Feedback[]
   generations   Generation[]
   reviewItems   ReviewItem[]
+  grievances    Grievance[]
   auditEntries  AuditLog[]     @relation("AuditActor")
 
   @@index([createdAt])
@@ -661,6 +662,71 @@ enum ReviewStatus {
   CLEARED
   /// Taken down. The project is deleted and the user told.
   REMOVED
+}
+
+/// A complaint filed through the public grievance form.
+///
+/// The IT Rules 2021 require an intermediary to acknowledge a complaint within
+/// 24 hours and dispose of it within a fixed period, and the DPDP Act 2023
+/// requires a route for data-principal requests. An email address alone
+/// satisfies neither in practice: nothing counts the clock, and nothing proves
+/// afterwards that a complaint was answered. This row is both.
+///
+/// Anyone can file one, signed in or not. The person most likely to complain
+/// about a video is somebody who saw it posted elsewhere and has no account.
+model Grievance {
+  id String @id @default(cuid())
+
+  /// Short, quotable id given to the complainant, e.g. "GRV-7K2M9QXA".
+  reference String @unique
+
+  /// A `GRIEVANCE_CATEGORIES` id. Decides the deadline.
+  category   String
+  name       String?
+  email      String
+  message    String  @db.Text
+  /// Where the content was seen, if the complaint is about a video.
+  contentUrl String?
+
+  /// Set when the complainant was signed in. Never required.
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  /// Salted hash of the submitting IP — enough to spot a flood, useless for
+  /// identifying anyone.
+  ipHash String?
+
+  status GrievanceStatus @default(OPEN)
+
+  /// When the complainant was told we have it. Set by the automatic reply, or
+  /// by hand when that mail could not be sent and somebody wrote instead.
+  acknowledgedAt DateTime?
+  /// The deadline for disposing of it, fixed when it is filed.
+  dueAt          DateTime
+
+  resolvedAt DateTime?
+  resolvedBy String?
+  /// What was decided and why. Sent to the complainant.
+  resolution String?   @db.Text
+
+  /// Its author deleted their account while it was open. Who made it and what
+  /// they wrote are erased once it is decided and they have been told.
+  eraseOnClose Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, dueAt])
+  @@index([userId])
+  @@map("grievance")
+}
+
+enum GrievanceStatus {
+  OPEN
+  /// Action taken, e.g. the content was removed.
+  RESOLVED
+  /// Looked into; no action warranted. The reason still goes to the complainant.
+  DISMISSED
 }
 
 model Feedback {

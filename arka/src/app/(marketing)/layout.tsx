@@ -12,6 +12,7 @@ const FOOTER_LINKS = [
   // Reachable from every public page, because a grievance route nobody can
   // find does not satisfy the rule that requires publishing one.
   { href: "/acceptable-use", label: "Acceptable use" },
+  { href: "/grievance", label: "Report a problem" },
   { href: "/contact", label: "Contact" },
 ] as const;
 

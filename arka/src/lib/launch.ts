@@ -52,4 +52,5 @@ export const PUBLIC_WHILE_CLOSED = [
   "/refunds",
   "/contact",
   "/acceptable-use",
+  "/grievance",
 ];
