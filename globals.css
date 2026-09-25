@@ -1,0 +1,1144 @@
+@import "tailwindcss";
+
+/* ─── Design Tokens — warm cream, navy accent, stamped card boxes ────── */
+:root {
+  --board:       #f3e9cf;   /* page background — warm cream */
+  --board-deep:  #ead9ad;   /* deeper cream for banded sections */
+  --card:        #fbf3df;   /* card fill — lighter cream */
+
+  --ink:         #2b2620;   /* primary text */
+  /* 0.62/0.4 measured at 4.05:1 / 2.28:1 against --board — both fail WCAG
+     AA's 4.5:1 for normal text (Lighthouse flagged it). Raised to clear
+     4.5:1 against both --board and the lighter --card with margin, while
+     keeping ink-2 visibly darker than ink-3 so the two-tier hierarchy
+     (secondary vs. muted-meta text) still reads correctly. */
+  --ink-2:       rgba(43,38,32,0.72);
+  --ink-3:       rgba(43,38,32,0.68);
+
+  --line:        rgba(43,38,32,0.22);   /* card borders */
+  --shadow:      rgba(43,38,32,0.16);   /* hard offset shadow */
+
+  --pin:         #1f3a5c;   /* navy accent — labels, borders, buttons */
+  --pin-glow:    rgba(31,58,92,0.18);
+  --green:       #4a7c59;   /* verified / paid */
+  --danger:      #b6392c;   /* destructive actions only */
+  --terracotta:  #a8552e;   /* brand mark accent — matches the OppIDX logo */
+
+  --btn-bg:      #1f3a5c;   /* solid button fill */
+  --btn-text:    #f3e9cf;   /* button label on solid fill */
+
+  --tag-bg:      rgba(43,38,32,0.06);   /* #tag pills, quiet fills */
+  --stat-bg:     rgba(168,85,46,0.10);  /* hero-stat pill behind --terracotta */
+  --skeleton:    rgba(43,38,32,0.07);   /* loading placeholder fill */
+  --skeleton-hi: rgba(43,38,32,0.13);   /* its shimmer crest */
+
+  --font-display: 'Special Elite', 'Courier New', monospace;
+  --font-mono:    'IBM Plex Mono', 'Courier New', monospace;
+
+  color-scheme: light;
+}
+
+/* ─── Night palette ──────────────────────────────────────────────────
+   Not a generic dark mode: the same warm paper board, lit from a
+   different time of day. The background keeps its brown cast rather
+   than going blue-grey, cards stay a shade *lighter* than the board so
+   the stamped rectangle still reads as a card sitting on a surface, and
+   the offset shadow stays hard (no blur) — it just becomes a true
+   shadow instead of a darker ink.
+
+   --pin inverts its role out of necessity: navy #1f3a5c on a dark board
+   is 1.4:1, unreadable. It becomes a pale slate-blue and solid buttons
+   flip to dark-on-light so the accent still carries the same weight.
+
+   Applied via a [data-theme] attribute that app/layout.tsx's inline
+   script stamps on <html> before first paint (see ThemeScript there) —
+   the media query below is only the no-JS fallback, and is scoped to
+   :not([data-theme]) so it can never fight an explicit choice. ─────── */
+:root[data-theme="dark"] {
+  --board:       #17140f;
+  --board-deep:  #100d09;
+  --card:        #221d16;
+
+  --ink:         #f2e8d2;
+  --ink-2:       rgba(242,232,210,0.78);
+  --ink-3:       rgba(242,232,210,0.62);
+
+  --line:        rgba(242,232,210,0.20);
+  --shadow:      rgba(0,0,0,0.55);
+
+  --pin:         #93b7dd;
+  --pin-glow:    rgba(147,183,221,0.24);
+  --green:       #7fbc8e;
+  --danger:      #e2796a;
+  --terracotta:  #dd9668;
+
+  --btn-bg:      #93b7dd;
+  --btn-text:    #16120d;
+
+  --tag-bg:      rgba(242,232,210,0.09);
+  --stat-bg:     rgba(221,150,104,0.16);
+  --skeleton:    rgba(242,232,210,0.07);
+  --skeleton-hi: rgba(242,232,210,0.13);
+
+  color-scheme: dark;
+}
+
+/* No-JS fallback only — an explicit data-theme always wins. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --board:       #17140f;
+    --board-deep:  #100d09;
+    --card:        #221d16;
+    --ink:         #f2e8d2;
+    --ink-2:       rgba(242,232,210,0.78);
+    --ink-3:       rgba(242,232,210,0.62);
+    --line:        rgba(242,232,210,0.20);
+    --shadow:      rgba(0,0,0,0.55);
+    --pin:         #93b7dd;
+    --pin-glow:    rgba(147,183,221,0.24);
+    --green:       #7fbc8e;
+    --danger:      #e2796a;
+    --terracotta:  #dd9668;
+    --btn-bg:      #93b7dd;
+    --btn-text:    #16120d;
+    --tag-bg:      rgba(242,232,210,0.09);
+    --stat-bg:     rgba(221,150,104,0.16);
+    --skeleton:    rgba(242,232,210,0.07);
+    --skeleton-hi: rgba(242,232,210,0.13);
+    color-scheme: dark;
+  }
+}
+
+/* ─── Reset & Base ──────────────────────────────────────────────────── */
+/* Wrapped in Tailwind's own `base` layer (declared by `@import "tailwindcss"`
+   above) — un-layered rules always beat layered ones regardless of
+   specificity, so an un-layered universal `margin: 0` here was silently
+   overriding every Tailwind margin utility (mx-auto, my-*, etc.) sitewide. */
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Scraped listing descriptions and raw application URLs are both arbitrary
+     third-party text — a 90-character URL rendered verbatim (the listing
+     page shows "Apply → {url}") pushed the layout wider than the viewport on
+     a phone, and body's overflow-x:hidden hid the symptom by clipping the
+     card rather than fixing the wrap. */
+  p, a, h1, h2, h3, h4, li, span, div {
+    overflow-wrap: break-word;
+  }
+
+  body {
+    font-family: var(--font-mono), monospace;
+    color: var(--ink);
+    min-height: 100vh;
+    overflow-x: hidden;
+    line-height: 1.6;
+    background-color: var(--board);
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display), var(--font-mono), monospace;
+    letter-spacing: -0.01em;
+  }
+}
+
+/* ─── Scrollbar ─────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(43,38,32,0.25); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(43,38,32,0.4); }
+
+/* ─── Card box — flat, bordered, hard offset shadow ──────────────────
+   No tilt, no pins. A stamped rectangle sitting on the page. ─────── */
+.card-box {
+  background: var(--card);
+  color: var(--ink);
+  border-radius: 3px;
+  border: 1.5px solid var(--line);
+  box-shadow: 4px 4px 0 var(--shadow);
+  position: relative;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.card-box:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 var(--shadow);
+}
+
+/* ─── Section divider: thin rule broken by a centered label ──────────
+   Usage: <div class="divider"><span>◆ LABEL ◆</span></div>          */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--pin);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.divider span {
+  white-space: nowrap;
+}
+@media (max-width: 480px) {
+  .divider span {
+    white-space: normal;
+    text-align: center;
+  }
+}
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+/* ─── Animations ────────────────────────────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   SITE CHROME — the persistent header/footer mounted in app/layout.tsx.
+
+   Written as real classes with real breakpoints rather than the inline
+   style objects used elsewhere in this codebase, because inline styles
+   cannot express a media query — which is why the whole site was
+   desktop-only until now (this file previously contained exactly one
+   @media rule, and it controlled text wrapping on a decorative divider).
+   ══════════════════════════════════════════════════════════════════ */
+
+:root {
+  --shell-h: 58px;
+  --gutter: 24px;
+  --maxw: 1100px;
+}
+
+/* Anchor links (e.g. the cards' "#related" deep link) must not land under
+   the sticky header. */
+@layer base {
+  :target { scroll-margin-top: calc(var(--shell-h) + 16px); }
+}
+
+.site-main {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ─── Header ─────────────────────────────────────────────────────────── */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 80;
+  background: var(--card);
+  border-bottom: 1.5px solid var(--line);
+}
+
+.site-header-inner {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+  height: var(--shell-h);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.site-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: var(--ink);
+  flex-shrink: 0;
+}
+.site-brand img { display: block; }
+
+.site-nav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.site-nav-link {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--ink-2);
+  text-decoration: none;
+  white-space: nowrap;
+  padding: 4px 0;
+  border-bottom: 2px solid transparent;
+}
+.site-nav-link:hover { color: var(--ink); }
+.site-nav-link.is-active {
+  color: var(--pin);
+  border-bottom-color: var(--pin);
+}
+
+.site-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.hdr-search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--board);
+  border: 1.5px solid var(--line);
+  border-radius: 2px;
+  padding: 6px 10px;
+  color: var(--ink-3);
+  width: 190px;
+}
+.hdr-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: none;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--ink);
+}
+
+.btn-solid {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 14px;
+  border-radius: 2px;
+  border: none;
+  cursor: pointer;
+  background: var(--btn-bg);
+  color: var(--btn-text);
+  text-decoration: none;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  box-shadow: 3px 3px 0 var(--shadow);
+}
+.btn-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 14px;
+  border-radius: 2px;
+  border: 1.5px solid var(--line);
+  cursor: pointer;
+  background: var(--card);
+  color: var(--ink);
+  text-decoration: none;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.btn-block { width: 100%; padding: 11px 16px; font-size: 13px; }
+
+.site-menu-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 34px;
+  border-radius: 2px;
+  border: 1.5px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+/* ─── Drawer ─────────────────────────────────────────────────────────── */
+.site-drawer-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.42);
+  z-index: 90;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.site-drawer-scrim.is-open { opacity: 1; pointer-events: auto; }
+
+.site-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(370px, 92vw);
+  z-index: 91;
+  background: var(--card);
+  border-left: 1.5px solid var(--line);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  transform: translateX(100%);
+  transition: transform 0.22s ease;
+  padding: 18px 20px 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.site-drawer.is-open { transform: translateX(0); }
+/* `hidden` on a flex container is overridden by display:flex — restore it so
+   the closed drawer is genuinely out of the a11y tree and tab order. */
+.site-drawer[hidden] { display: none; }
+
+.site-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.site-drawer-close {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--ink-2);
+  padding: 0 4px;
+}
+.site-drawer-search { margin-bottom: 10px; }
+.site-drawer-search .hdr-search { width: 100%; padding: 9px 12px; }
+
+.drawer-label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pin);
+  margin-top: 14px;
+  margin-bottom: 2px;
+}
+
+.site-drawer-links { display: flex; flex-direction: column; }
+.site-drawer-link {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  text-decoration: none;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.site-drawer-link.is-active { color: var(--pin); }
+
+.site-drawer-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  padding: 7px 14px;
+  border-radius: 2px;
+  border: 1.5px solid var(--line);
+  background: var(--board);
+  text-decoration: none;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.site-drawer-cards { display: flex; flex-direction: column; gap: 8px; }
+.site-drawer-card { padding: 11px 13px; text-decoration: none; display: block; }
+.site-drawer-card-title {
+  display: block;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 12.5px;
+  color: var(--ink);
+  text-transform: uppercase;
+}
+.site-drawer-card-desc {
+  display: block;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  line-height: 1.4;
+}
+
+.site-drawer-cta { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+
+/* ─── Footer ─────────────────────────────────────────────────────────── */
+.site-footer {
+  border-top: 1.5px solid var(--line);
+  background: var(--card);
+  margin-top: 60px;
+}
+.site-footer-inner {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 38px var(--gutter) 26px;
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) 2.4fr;
+  gap: 34px;
+}
+.site-footer-brand p {
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  line-height: 1.6;
+  max-width: 30ch;
+}
+.site-footer-cols {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+}
+.site-footer-cols nav { display: flex; flex-direction: column; gap: 7px; }
+.site-footer-heading {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pin);
+  margin-bottom: 3px;
+}
+.site-footer-cols a {
+  font-size: 12.5px;
+  color: var(--ink-2);
+  text-decoration: none;
+  line-height: 1.4;
+}
+.site-footer-cols a:hover { color: var(--ink); text-decoration: underline; }
+
+.site-footer-base {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 14px var(--gutter) 26px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.site-footer-base a { color: var(--ink-3); text-decoration: none; }
+.site-footer-base a:hover { text-decoration: underline; }
+
+/* ══════════════════════════════════════════════════════════════════════
+   RESPONSIVE — the audience for this board is overwhelmingly on a phone.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Tablet / small laptop: the five-item nav plus search plus two buttons
+   stops fitting well before the drawer is strictly needed, so search
+   narrows first, then the drawer takes over. */
+@media (max-width: 1040px) {
+  .hdr-search { width: 150px; }
+  .site-nav { gap: 13px; }
+}
+
+@media (max-width: 900px) {
+  :root { --gutter: 18px; }
+  .site-nav { display: none; }
+  .site-menu-btn { display: inline-flex; }
+  .site-hide-sm { display: none; }
+  .site-footer-inner { grid-template-columns: 1fr; gap: 26px; }
+  .site-footer-cols { grid-template-columns: repeat(2, 1fr); gap: 22px 18px; }
+}
+
+@media (max-width: 560px) {
+  :root { --shell-h: 54px; --gutter: 15px; }
+  /* The header bar drops search to make room for the logo and menu — but the
+     drawer is then the only place search exists on a phone, so it has to
+     re-assert it rather than inherit this. */
+  .hdr-search { display: none; }
+  .site-drawer-search .hdr-search { display: flex; }
+  .site-nav-icon span { display: none; }
+  .site-header-inner { gap: 10px; }
+  .site-footer { margin-top: 40px; }
+  .site-footer-inner { padding-top: 30px; }
+}
+
+/* ─── Shared page-level responsive utilities ─────────────────────────
+   Used by pages converted off fixed desktop grids. `--card-min` lets a
+   grid drop to a single column on a phone instead of forcing a
+   horizontal scroll, which `repeat(auto-fill, minmax(260px, 1fr))`
+   does at 320px. */
+.page-shell {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+}
+
+.card-grid {
+  display: grid;
+  gap: 22px;
+  grid-template-columns: repeat(auto-fill, minmax(var(--card-min, 250px), 1fr));
+}
+
+/* ─── Hero search (homepage) ─────────────────────────────────────────── */
+.hero-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 560px;
+  background: var(--card);
+  border: 1.5px solid var(--line);
+  border-radius: 3px;
+  padding: 10px 13px;
+  margin-bottom: 20px;
+  box-shadow: 3px 3px 0 var(--shadow);
+}
+.hero-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: none;
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  color: var(--ink);
+}
+.hero-search button {
+  padding: 8px 16px;
+  border-radius: 2px;
+  border: none;
+  cursor: pointer;
+  background: var(--btn-bg);
+  color: var(--btn-text);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* A long-form reading card (listing body, manifesto). 32px of horizontal
+   padding inside a card on a 360px screen leaves ~260px of measure — this
+   gives the text back its room without changing the desktop look. */
+.card-pad-lg { padding: 36px 32px; }
+
+@media (max-width: 560px) {
+  .card-grid { gap: 16px; --card-min: 100%; }
+  .card-box:hover { transform: none; box-shadow: 4px 4px 0 var(--shadow); }
+  .card-pad-lg { padding: 24px 18px; }
+}
+
+/* Touch devices don't have hover; the lift just leaves cards stuck in the
+   translated state after a tap. */
+@media (hover: none) {
+  .card-box:hover { transform: none; box-shadow: 4px 4px 0 var(--shadow); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .card-box, .site-drawer, .site-drawer-scrim { transition: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   THEME TOGGLE
+   ══════════════════════════════════════════════════════════════════ */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 2px;
+  border: 1.5px solid var(--line);
+  background: var(--card);
+  color: var(--ink-2);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  font-family: var(--font-mono);
+}
+.theme-toggle:hover { color: var(--ink); border-color: var(--pin); }
+
+/* ══════════════════════════════════════════════════════════════════════
+   OPPORTUNITY CARD
+
+   These were ~30 inline style objects per card, re-serialized into the
+   HTML for every one of the ~34 cards the homepage ships — a large part
+   of why the document was 330KB before any listing text. As real classes
+   they are sent once, and (the reason this matters for phones) they can
+   finally carry breakpoints: the card's type and spacing were previously
+   frozen at desktop values on a 375px screen.
+   ══════════════════════════════════════════════════════════════════ */
+.opp-card { min-height: 220px; overflow: hidden; display: flex; flex-direction: column; }
+
+.opp-media { position: relative; }
+.opp-media.has-image { height: 132px; }
+
+.opp-video-badge {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(0,0,0,0.65);
+  border-radius: 20px;
+  padding: 3px 9px;
+  font-family: var(--font-mono);
+}
+
+.opp-body {
+  display: block;
+  padding: 20px 18px 14px;
+  text-decoration: none;
+  flex: 1;
+}
+
+.opp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.opp-audience {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pin);
+}
+
+.opp-stat {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--terracotta);
+  background: var(--stat-bg);
+  border-radius: 20px;
+  padding: 3px 9px;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+/* The "12 new since your last visit" promise, kept honest at the card
+   level — this marks the individual listings that count. */
+.opp-new {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--btn-text);
+  background: var(--pin);
+  border-radius: 2px;
+  padding: 3px 7px;
+  white-space: nowrap;
+}
+
+.opp-title {
+  font-family: var(--font-display);
+  font-size: 16.5px;
+  line-height: 1.35;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+
+.opp-org { font-size: 12.5px; color: var(--ink-2); margin-bottom: 10px; }
+
+.opp-desc {
+  font-size: 12.5px;
+  color: var(--ink-2);
+  line-height: 1.6;
+  margin-bottom: 14px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.opp-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-bottom: 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+.opp-meta .is-comp { color: var(--green); font-weight: 600; }
+.opp-meta .is-difficulty { font-weight: 600; }
+
+.opp-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.opp-tag {
+  font-size: 10px;
+  color: var(--ink-2);
+  background: var(--tag-bg);
+  border-radius: 2px;
+  padding: 2px 8px;
+  font-family: var(--font-mono);
+}
+
+.opp-apply {
+  border-top: 1px solid var(--line);
+  padding: 10px 18px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.opp-apply-link { color: var(--pin); text-decoration: none; }
+
+.opp-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 9px 18px;
+  border-top: 1px solid var(--line);
+  text-decoration: none;
+}
+.opp-strip-item {
+  font-size: 10.5px;
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ─── Phone: the comfort pass ────────────────────────────────────────
+   A phone is the primary device here, and every size above was picked
+   on a 1280px screen. 10.5px monospace metadata is genuinely hard to
+   read at arm's length, and three clamped lines of 12.5px description
+   at line-height 1.6 is a dense little brick. Everything grows, the
+   leading opens up, and the two tap targets on the card (Apply, Save)
+   get real 44px-tall hit areas instead of 11px text. ───────────────── */
+@media (max-width: 560px) {
+  .opp-card { min-height: 0; }
+  .opp-media.has-image { height: 168px; }
+
+  .opp-body { padding: 18px 17px 15px; }
+  .opp-title { font-size: 18px; line-height: 1.3; margin-bottom: 7px; }
+  .opp-org { font-size: 13.5px; margin-bottom: 11px; }
+  .opp-desc {
+    font-size: 13.5px;
+    line-height: 1.72;
+    margin-bottom: 15px;
+    -webkit-line-clamp: 4;
+  }
+  .opp-audience { font-size: 10.5px; }
+  .opp-stat { font-size: 11.5px; padding: 4px 10px; }
+  .opp-meta { font-size: 12px; gap: 7px 12px; }
+  .opp-tag { font-size: 11.5px; padding: 3px 9px; }
+
+  .opp-apply { padding: 6px 17px; font-size: 12.5px; gap: 10px; }
+  .opp-apply > * { min-height: 44px; display: inline-flex; align-items: center; }
+
+  .opp-strip { padding: 11px 17px; gap: 10px 14px; }
+  .opp-strip-item { font-size: 11.5px; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   SKELETON CARDS
+
+   Shown while a "Load more" page is in flight. They are deliberately the
+   same shape and height as a real card so the button under them doesn't
+   jump when the real ones land.
+   ══════════════════════════════════════════════════════════════════ */
+.skeleton-card { padding: 0; overflow: hidden; }
+.skeleton-card .sk-media { height: 132px; border-bottom: 1px solid var(--line); }
+.skeleton-card .sk-body { padding: 20px 18px 18px; display: flex; flex-direction: column; gap: 10px; }
+
+.sk {
+  background: var(--skeleton);
+  border-radius: 2px;
+  background-image: linear-gradient(90deg, var(--skeleton) 0%, var(--skeleton-hi) 50%, var(--skeleton) 100%);
+  background-size: 200% 100%;
+  animation: sk-shimmer 1.4s ease-in-out infinite;
+}
+.sk-line { height: 11px; }
+.sk-line.w-40 { width: 40%; }
+.sk-line.w-60 { width: 60%; }
+.sk-line.w-75 { width: 75%; }
+.sk-line.w-90 { width: 90%; }
+.sk-title { height: 17px; width: 85%; }
+
+@keyframes sk-shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
+@media (max-width: 560px) {
+  .skeleton-card .sk-media { height: 168px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sk { animation: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   FLOATING RAIL — search + back to top
+
+   Present on every page with the site shell, at every scroll position.
+   Both buttons are always live and the rail never changes shape as you
+   scroll — a control that appears or disables itself mid-scroll shifts
+   the one below it out from under your thumb.
+
+   Sits above the iOS safe-area inset so it clears the home indicator.
+   ══════════════════════════════════════════════════════════════════ */
+.float-rail {
+  position: fixed;
+  right: 18px;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.float-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 2px;
+  border: 1.5px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  cursor: pointer;
+  box-shadow: 3px 3px 0 var(--shadow);
+  /* Emoji ignore `color`, so the glyph carries its own colour — this only
+     has to size it to match the ↑ below it. */
+  font-size: 19px;
+  line-height: 1;
+  text-decoration: none;
+  font-family: var(--font-mono);
+  padding: 0;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
+}
+.float-btn:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--shadow); }
+.float-btn:active { transform: translate(1px, 1px); box-shadow: 2px 2px 0 var(--shadow); }
+.float-btn.is-primary { border-color: var(--pin); }
+
+/* ScrollSubscribePrompt is fixed to the same corner and, on a phone, is
+   effectively full-width — it takes the space while it's up. */
+body.has-scroll-prompt .float-rail { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .float-btn { transition: none; }
+  .float-btn:hover { transform: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   HERO — phone comfort
+
+   The hero used to push the first listing 1,193px down a 812px-tall
+   phone: a screen and a half of copy before any evidence the board has
+   anything on it. The type stays the same size (it is the one place big
+   display type earns its room); the stacking just stops being so tall.
+   ══════════════════════════════════════════════════════════════════ */
+.hero { padding: 30px 0 26px; border-bottom: 1px solid var(--line); }
+.hero-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--pin);
+  margin-bottom: 10px;
+}
+.hero h1 {
+  font-family: var(--font-display);
+  font-size: clamp(26px, 4.4vw, 40px);
+  line-height: 1.18;
+  margin-bottom: 12px;
+  max-width: 640px;
+}
+.hero-lead { color: var(--ink-2); font-size: 14.5px; max-width: 560px; margin-bottom: 8px; line-height: 1.7; }
+.hero-sub  { color: var(--ink-3); font-size: 12.5px; max-width: 560px; margin-bottom: 18px; line-height: 1.6; }
+
+.hero-subscribe {
+  padding: 15px 17px;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.hero-subscribe-copy { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
+
+@media (max-width: 560px) {
+  .hero { padding: 22px 0 20px; }
+  .hero h1 { font-size: 27px; margin-bottom: 10px; }
+  .hero-lead { font-size: 14px; margin-bottom: 14px; line-height: 1.65; }
+  /* The second paragraph is provenance, not a pitch — it belongs on the
+     page but not in front of the search box on a phone. */
+  .hero-sub { display: none; }
+  .hero-search { padding: 6px 8px 6px 12px; margin-bottom: 16px; }
+  .hero-search input { font-size: 16px; }  /* < 16px makes iOS zoom on focus */
+  .hero-search button { padding: 11px 16px; }
+  /* Below the search on a phone the newsletter box is one more thing
+     between someone and the board; ScrollSubscribePrompt already asks
+     later, at a point where they've seen what's on offer. */
+  .hero-subscribe { display: none; }
+}
+
+/* The board's own section headings need less air on a phone than the
+   38px desktop rhythm gives them. */
+@media (max-width: 560px) {
+  .board-section { margin-bottom: 26px !important; }
+}
+
+/* ─── "Browse by who you are" ────────────────────────────────────────
+   Four full-width stacked cards was ~600px of chrome standing between a
+   phone visitor and the first actual opportunity — four signposts shown
+   at the size of destinations. As a swipeable row they stay reachable
+   and stop being a wall. Scrolls inside itself, so the page body never
+   scrolls sideways. ─────────────────────────────────────────────────── */
+@media (max-width: 560px) {
+  .audience-row {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    /* Bleed to the screen edges so the row reads as continuing past them,
+       while the first card still lines up with the page gutter. */
+    margin-inline: calc(var(--gutter) * -1);
+    padding-inline: var(--gutter);
+    padding-bottom: 6px;
+    gap: 10px !important;
+    margin-bottom: 26px !important;
+  }
+  .audience-row::-webkit-scrollbar { display: none; }
+  .audience-row > a {
+    flex: 0 0 auto;
+    width: 200px;
+    scroll-snap-align: start;
+    align-items: center !important;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   "N NEW SINCE YOUR LAST VISIT" BADGE
+   ══════════════════════════════════════════════════════════════════ */
+.new-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 9px 14px 9px 10px;
+  border-radius: 2px;
+  background: var(--card);
+  border: 1.5px solid var(--pin);
+  box-shadow: 3px 3px 0 var(--shadow);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--pin);
+  line-height: 1.3;
+}
+
+.new-badge-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  padding: 4px 7px;
+  border-radius: 2px;
+  background: var(--pin);
+  color: var(--btn-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.new-badge-hint {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  color: var(--ink-3);
+  margin-top: 2px;
+}
+
+@media (max-width: 560px) {
+  .new-badge { font-size: 13px; width: 100%; }
+  .new-badge-count { font-size: 15px; min-width: 34px; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   LOAD MORE
+
+   Replaces the scroll sentinel that made the footer unreachable — see
+   app/HomeBoard.tsx. Given real room above and below so it reads as the
+   end of a section rather than a stray control.
+   ══════════════════════════════════════════════════════════════════ */
+.board-more {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  margin: 8px 0 44px;
+}
+
+.board-more-btn {
+  padding: 13px 28px;
+  font-size: 13px;
+  box-shadow: 3px 3px 0 var(--shadow);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.board-more-btn:hover:not(:disabled) {
+  transform: translate(-2px, -2px);
+  box-shadow: 5px 5px 0 var(--shadow);
+}
+.board-more-btn:disabled { opacity: 0.6; cursor: default; }
+
+.board-more-count {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+.board-more-error {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--danger);
+}
+
+.board-end {
+  text-align: center;
+  padding: 20px;
+  margin-bottom: 20px;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+@media (max-width: 560px) {
+  .board-more { margin-bottom: 34px; }
+  .board-more-btn { width: 100%; padding: 15px 20px; font-size: 13.5px; }
+  .board-more-btn:hover:not(:disabled) { transform: none; box-shadow: 3px 3px 0 var(--shadow); }
+  .board-end { font-size: 13px; padding: 18px 4px; }
+}
