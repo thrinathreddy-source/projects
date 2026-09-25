@@ -1,13 +1,8 @@
 {
   "crons": [
-    { "path": "/api/cron/policy-digest", "schedule": "30 15 * * *" },
-    { "path": "/api/pulse/live/refresh", "schedule": "30 0 * * *" },
-    { "path": "/api/cron/social-digest", "schedule": "30 3 * * *" },
-    { "path": "/api/cron/retention-snapshot", "schedule": "0 3 * * 1" },
-    { "path": "/api/cron/link-health", "schedule": "0 4 * * *" },
-    { "path": "/api/cron/outcome-nudge", "schedule": "0 10 * * 2" },
-    { "path": "/api/cron/weekly-digest-email", "schedule": "30 3 * * 1" },
-    { "path": "/api/match/find", "schedule": "30 14 * * 5" },
-    { "path": "/api/cron/reconcile-billing", "schedule": "0 3 1 * *" }
+    {
+      "path": "/api/match/find",
+      "schedule": "30 14 * * 5"
+    }
   ]
 }
