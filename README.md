@@ -1,37 +1,14 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Projects
 
-## Getting Started
+Each folder is a complete, independent project with its own README,
+dependencies and setup. Run commands from inside the project's folder.
 
-First, run the development server:
+| Project | Folder | What it is | Stack |
+|---|---|---|---|
+| **Arka** | [`arka/`](arka) | Turn a line of text into a short anime-style video, for Indian creators | Next.js, Prisma + Postgres |
+| **OppIDX** | [`oppidx/`](oppidx) | Opportunity board: internships, scholarships, fellowships, grants | Next.js, Prisma + SQLite/Turso |
+| **The Mayatara** | [`mayatara/`](mayatara) | One AI match every Friday: dating, friendship, co-founder, marriage | Next.js, Supabase |
+| **Drishti** | [`openglass-multilingual/`](openglass-multilingual) | Offline smart glasses that answer in your own language | Python gateway + hardware docs |
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-# THEMAYATARA
+`mayatara/proposals/` also holds the scripts that generate the Arka
+solar-kit land and state proposal documents.
