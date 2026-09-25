@@ -1,0 +1,23 @@
+import OpenAI from "openai";
+
+// Constructed lazily, inside the function — see lib/platform/moderation.ai.ts:
+// `new OpenAI()` throws immediately if OPENAI_API_KEY is missing, which at
+// module scope crashes every route that imports this file at load time
+// (including `next build`'s page-data collection), not just this call.
+//
+// text-embedding-3-small: $0.02 per 1M tokens — ~$0.000004 per profile. Essentially free.
+export async function getEmbedding(text: string): Promise<number[]> {
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const res = await openai.embeddings.create({
+    model: "text-embedding-3-small",
+    input: text.slice(0, 8000), // hard cap, profiles are well under this
+  });
+  return res.data[0].embedding;
+}
+
+export function profileToText(profile: Record<string, string>, lookingFor: string): string {
+  return [
+    `looking for: ${lookingFor}`,
+    ...Object.entries(profile).map(([k, v]) => `${k}: ${v}`),
+  ].join(". ");
+}
