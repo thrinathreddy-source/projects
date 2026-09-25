@@ -93,6 +93,27 @@ describe("filing", () => {
   });
 
   /**
+   * The form is public and the acknowledgement goes to whatever address was
+   * typed. If it echoed anything the submitter wrote, anyone could use Arka's
+   * mail domain to deliver their own text to a stranger.
+   */
+  it("sends an acknowledgement that carries nothing the submitter typed", async () => {
+    await fileGrievance(
+      complaint({
+        name: "https://phish.example/login Claim your prize",
+        email: "stranger@example.test",
+        message: "Visit https://phish.example/login to verify your bank account today.",
+      }),
+      {},
+    );
+
+    const ack = sent.mails.find((mail) => mail.to === "stranger@example.test");
+    expect(ack).toBeDefined();
+    expect(`${ack!.subject}\n${ack!.text}`).not.toContain("phish.example");
+    expect(ack!.text).not.toContain("Claim your prize");
+  });
+
+  /**
    * The row is the record, not the mail. A bounced acknowledgement must not
    * lose the complaint — and must not be recorded as an acknowledgement either,
    * or the 24-hour clock would read as satisfied when it is not.
@@ -171,6 +192,9 @@ describe("deciding", () => {
     expect(sent.mails).toHaveLength(1);
     expect(sent.mails[0].to).toBe("asha@example.com");
     expect(sent.mails[0].text).toContain("We removed the video");
+    // The route to contest it has to be one that is actually read.
+    expect(sent.mails[0].text).toContain("/grievance");
+    expect(sent.mails[0].text).toContain(filed.reference);
 
     const audit = await db.auditLog.findFirstOrThrow({ where: { targetId: row.id } });
     expect(audit.action).toBe("grievance.resolve");
@@ -210,7 +234,10 @@ describe("deciding", () => {
     const filed = await fileGrievance(complaint(), {});
     const row = await db.grievance.findUniqueOrThrow({ where: { reference: filed.reference } });
 
-    await acknowledgeGrievance(row.id, adminId);
+    await Promise.all([
+      acknowledgeGrievance(row.id, adminId),
+      acknowledgeGrievance(row.id, adminId),
+    ]);
     await acknowledgeGrievance(row.id, adminId);
 
     expect((await db.grievance.findUniqueOrThrow({ where: { id: row.id } })).acknowledgedAt).not.toBeNull();
@@ -302,5 +329,26 @@ describe("the complainant's own data", () => {
     expect(open.userId).toBeNull();
     expect(open.email).toBe("asha@example.com");
     expect(open.message).not.toBe("");
+
+    // Answered after the account is gone: the decision still reaches them,
+    // and then who they were goes too — which is what the privacy page says.
+    sent.mails = [];
+    await decideGrievance(open.id, "dismiss", "The suspension stands; the video broke the policy.", adminId);
+
+    expect(sent.mails.map((mail) => mail.to)).toEqual(["asha@example.com"]);
+    const answered = await db.grievance.findUniqueOrThrow({ where: { reference: openRef } });
+    expect(answered).toMatchObject({ name: null, email: "", message: "", status: "DISMISSED" });
+    expect(answered.resolution).toBe("The suspension stands; the video broke the policy.");
+  });
+
+  it("leaves complaints from people who never deleted anything alone when closed", async () => {
+    const adminId = await makeUser(0);
+    const filed = await fileGrievance(complaint(), {});
+    const row = await db.grievance.findUniqueOrThrow({ where: { reference: filed.reference } });
+
+    await decideGrievance(row.id, "resolve", "Removed the video.", adminId);
+
+    const closed = await db.grievance.findUniqueOrThrow({ where: { id: row.id } });
+    expect(closed.email).toBe("asha@example.com");
   });
 });

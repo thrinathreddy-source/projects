@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { AppError, notFound } from "@/lib/errors";
 import { remove as removeObject } from "@/lib/storage";
 import { logger } from "@/lib/logger";
+import { ERASED_CONTACT } from "@/lib/grievances";
 
 /**
  * The data-principal rights the DPDP Act 2023 gives every user: to see what we
@@ -147,9 +148,9 @@ export type DeletionOutcome = {
  *   scrubbed  name, email, image on the user row
  *   retained  transactions, credit ledger, generation analytics — none of
  *             which carry PII once the user row is anonymised
- *             open grievances' contents: the person asked us to act on
- *             them, and deleting the address would leave no way to answer
- *             a complaint that is still on a legal deadline
+ *             open grievances' contents, until each is decided: the person
+ *             asked us to act on them, and deleting the address now would
+ *             leave no way to answer a complaint still on a legal deadline
  *
  * Irreversible. The caller is responsible for confirming intent.
  */
@@ -248,10 +249,16 @@ export async function deleteAccount(
     await tx.feedback.deleteMany({ where: { userId } });
 
     // A closed complaint keeps its category, dates and outcome — the record
-    // that it was answered — but not who made it or what they wrote.
+    // that it was answered — but not who made it or what they wrote. An open
+    // one keeps both until it is decided, so the decision can still reach
+    // them, and is erased then.
     await tx.grievance.updateMany({
       where: { userId, status: { not: "OPEN" } },
-      data: { name: null, email: "", message: "", contentUrl: null, ipHash: null },
+      data: ERASED_CONTACT,
+    });
+    await tx.grievance.updateMany({
+      where: { userId, status: "OPEN" },
+      data: { eraseOnClose: true },
     });
     await tx.grievance.updateMany({ where: { userId }, data: { userId: null } });
 

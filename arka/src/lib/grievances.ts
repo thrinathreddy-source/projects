@@ -175,7 +175,7 @@ export async function fileGrievance(
   }
 
   const acknowledged = await trySend({
-    ...acknowledgementEmail(grievance.reference, category.resolveWithinHours, input),
+    ...acknowledgementEmail(grievance.reference, category.resolveWithinHours),
     to: input.email,
   });
 
@@ -202,11 +202,16 @@ export async function fileGrievance(
 export async function acknowledgeGrievance(id: string, adminId: string): Promise<void> {
   const grievance = await db.grievance.findUnique({ where: { id } });
   if (!grievance) throw notFound("No such grievance.");
-  if (grievance.acknowledgedAt) return;
 
-  await db.$transaction([
-    db.grievance.update({ where: { id }, data: { acknowledgedAt: new Date() } }),
-    db.auditLog.create({
+  // Conditional, so a double click or two admins at once record it once.
+  await db.$transaction(async (tx) => {
+    const updated = await tx.grievance.updateMany({
+      where: { id, acknowledgedAt: null },
+      data: { acknowledgedAt: new Date() },
+    });
+    if (updated.count === 0) return;
+
+    await tx.auditLog.create({
       data: {
         actorId: adminId,
         action: "grievance.acknowledge",
@@ -214,9 +219,23 @@ export async function acknowledgeGrievance(id: string, adminId: string): Promise
         targetId: id,
         meta: { reference: grievance.reference },
       },
-    }),
-  ]);
+    });
+  });
 }
+
+/**
+ * What erasure removes from a closed complaint: who made it and what they
+ * wrote. The category, dates, outcome and reference stay — the record that it
+ * was answered. Shared with account deletion so the two cannot drift.
+ */
+export const ERASED_CONTACT = {
+  name: null,
+  email: "",
+  message: "",
+  contentUrl: null,
+  ipHash: null,
+  eraseOnClose: false,
+} as const;
 
 export type GrievanceDecision = "resolve" | "dismiss";
 
@@ -291,9 +310,15 @@ export async function decideGrievance(
   });
 
   const notified = await trySend({
-    ...outcomeEmail(grievance.reference, status, text, grievance.name),
+    ...outcomeEmail(grievance.reference, status, text),
     to: grievance.email,
   });
+
+  // Its author deleted their account while it was open. It was kept only so
+  // it could be answered; now it has been, who made it goes.
+  if (grievance.eraseOnClose) {
+    await db.grievance.update({ where: { id }, data: ERASED_CONTACT });
+  }
 
   return { notified };
 }
@@ -355,27 +380,26 @@ function officerNotification(reference: string, input: GrievanceInput, dueAt: Da
   };
 }
 
-function acknowledgementEmail(
-  reference: string,
-  resolveWithinHours: number,
-  input: GrievanceInput,
-) {
-  const firstName = input.name.split(" ")[0] || "there";
-
+/**
+ * The acknowledgement carries nothing the submitter typed — not their message,
+ * not even their name.
+ *
+ * The form is public and this mail goes to whatever address was entered, so
+ * anything echoed here is text a stranger can have Arka's domain deliver to
+ * anyone. A fixed message with a reference is useless to a spammer; the
+ * complainant knows what they wrote.
+ */
+function acknowledgementEmail(reference: string, resolveWithinHours: number) {
   return {
     subject: `We have your complaint — reference ${reference}`,
     text: [
-      `Hi ${firstName},`,
+      "Hello,",
       "",
-      `This confirms we received your complaint. Your reference is ${reference}.`,
+      `This confirms we received your complaint to Arka. Your reference is ${reference}.`,
       "",
       `A person will look at it and reply with a decision within ${describeDeadline(
         resolveWithinHours,
       )}. Quote the reference if you write to us about it.`,
-      "",
-      "What you sent:",
-      "",
-      input.message,
       "",
       "If you did not file this, you can ignore this email.",
       "",
@@ -384,19 +408,14 @@ function acknowledgementEmail(
   };
 }
 
-function outcomeEmail(
-  reference: string,
-  status: "RESOLVED" | "DISMISSED",
-  resolution: string,
-  name: string | null,
-) {
-  const firstName = name?.split(" ")[0] || "there";
+/** The resolution is an admin's words; the greeting still names nobody. */
+function outcomeEmail(reference: string, status: "RESOLVED" | "DISMISSED", resolution: string) {
   const legal = COMPANY.email.legal.trim();
 
   return {
     subject: `Your complaint ${reference} — ${status === "RESOLVED" ? "action taken" : "decision"}`,
     text: [
-      `Hi ${firstName},`,
+      "Hello,",
       "",
       status === "RESOLVED"
         ? `We have acted on your complaint ${reference}.`
@@ -404,9 +423,10 @@ function outcomeEmail(
       "",
       resolution,
       "",
-      legal
-        ? `If you disagree with this decision, reply to this email or write to ${legal}.`
-        : "If you disagree with this decision, reply to this email.",
+      // Not "reply to this email": replies go to EMAIL_FROM, which may well be
+      // an address nobody reads. The form always reaches the desk.
+      `If you disagree with this decision, file it again at ${env().BETTER_AUTH_URL}/grievance ` +
+        `and quote ${reference}${legal ? `, or write to ${legal}` : ""}.`,
       "",
       "— Arka",
     ].join("\n"),

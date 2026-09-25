@@ -18,6 +18,7 @@ CREATE TABLE "grievance" (
     "resolvedAt" TIMESTAMP(3),
     "resolvedBy" TEXT,
     "resolution" TEXT,
+    "eraseOnClose" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 

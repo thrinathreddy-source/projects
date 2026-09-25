@@ -709,6 +709,10 @@ model Grievance {
   /// What was decided and why. Sent to the complainant.
   resolution String?   @db.Text
 
+  /// Its author deleted their account while it was open. Who made it and what
+  /// they wrote are erased once it is decided and they have been told.
+  eraseOnClose Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
