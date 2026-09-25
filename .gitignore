@@ -19,3 +19,9 @@ __pycache__/
 .claude/
 piper-venv/
 piper-voices/
+
+# build output / local databases
+*.tsbuildinfo
+next-env.d.ts
+*.db
+*.db-journal

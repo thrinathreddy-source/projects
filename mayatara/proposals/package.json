@@ -1,0 +1,15 @@
+{
+  "name": "mayatara-proposals",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Generates the Arka solar-kit land and state site proposal documents (.docx and .pdf).",
+  "type": "commonjs",
+  "scripts": {
+    "land": "node generate_land_proposal.js",
+    "states": "node generate_state_docx.js",
+    "pdfs": "python3 generate_state_pdfs.py"
+  },
+  "dependencies": {
+    "docx": "^9.7.1"
+  }
+}
