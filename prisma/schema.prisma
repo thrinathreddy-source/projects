@@ -1,724 +1,530 @@
-// Arka — AI short-form video generation for Indian stories in Japanese anime style.
-//
-// Money conventions (no floats anywhere):
-//   * Revenue        -> `amountMinor` Int, in the currency's minor unit (paise / cents).
-//   * Provider cost  -> `costUsdMicro` Int, USD * 1_000_000. $0.05 => 50_000.
-// Credits are whole integers. One generation costs N credits, set by admin at runtime.
+// prisma/schema.prisma
+// SQLite-compatible: enums → String, Json → String
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
-  moduleFormat = "cjs"
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
-// Prisma 7: the connection URL lives in `prisma.config.ts` for the CLI and is
-// supplied to the client at runtime through the pg driver adapter.
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
 }
 
-// ---------------------------------------------------------------------------
-// Auth (Better Auth core + admin plugin)
-// ---------------------------------------------------------------------------
-
+// Admin-only account (the site owner). No public signup flow is linked from
+// the UI — this exists purely to gate /admin.
 model User {
-  id            String    @id
-  name          String
-  email         String    @unique
-  emailVerified Boolean   @default(false)
-  image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  // Better Auth admin plugin
-  role       String    @default("user") // "user" | "admin"
-  banned     Boolean   @default(false)
-  banReason  String?
-  banExpires DateTime?
-
-  // Arka profile
-  country String @default("IN")
-  locale  String @default("en")
-
-  // Credit balances. `credits` is spendable; `creditsHeld` is reserved by
-  // in-flight jobs. Both are maintained transactionally alongside CreditLedger.
-  credits     Int @default(0)
-  creditsHeld Int @default(0)
-
-  // Set the moment the welcome credits are handed out, and used as the guard
-  // that hands them out exactly once. Signup no longer grants them — a verified
-  // email does — and a verification link can be opened more than once.
-  signupGrantedAt DateTime?
-
-  // Denormalised plan pointer; the authoritative record is Subscription.
-  planCode String @default("free")
-
-  sessions      Session[]
-  accounts      Account[]
-  projects      Project[]
-  ledger        CreditLedger[]
-  transactions  Transaction[]
-  subscriptions Subscription[]
-  apiKeys       ApiKey[]
-  feedback      Feedback[]
-  generations   Generation[]
-  reviewItems   ReviewItem[]
-  auditEntries  AuditLog[]     @relation("AuditActor")
-
-  @@index([createdAt])
-  @@index([planCode])
-  @@map("user")
-}
-
-model Session {
-  id        String   @id
-  expiresAt DateTime
-  token     String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  ipAddress String?
-  userAgent String?
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  impersonatedBy String?
-
-  @@index([userId])
-  @@map("session")
-}
-
-model Account {
-  id                    String    @id
-  accountId             String
-  providerId            String
-  userId                String
-  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  accessToken           String?
-  refreshToken          String?
-  idToken               String?
-  accessTokenExpiresAt  DateTime?
-  refreshTokenExpiresAt DateTime?
-  scope                 String?
-  password              String?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-
-  @@unique([providerId, accountId])
-  @@index([userId])
-  @@map("account")
-}
-
-model Verification {
-  id         String   @id
-  identifier String
-  value      String
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  @@index([identifier])
-  @@map("verification")
-}
-
-/// Rate limit counters, owned and pruned by Better Auth.
-///
-/// Kept in Postgres rather than process memory so the limit is shared across
-/// serverless instances and survives a cold start. `lastRequest` is epoch
-/// milliseconds, not a timestamp — that is the shape Better Auth reads.
-model RateLimit {
-  id          String @id @default(cuid())
-  key         String @unique
-  count       Int
-  lastRequest BigInt
-
-  @@index([lastRequest])
-  @@map("rate_limit")
-}
-
-/// Fixed-window rate limit counters for Arka's own endpoints.
-///
-/// Deliberately not the `rate_limit` table above: Better Auth owns that one and
-/// prunes it on its own schedule, so sharing it would mean our limits vanish
-/// whenever it decides to tidy up. Same storage argument applies though — a
-/// per-process counter on a serverless host is the limit multiplied by the
-/// instance count, which is no limit at all.
-model ApiRateLimit {
-  key         String   @id
-  count       Int
-  windowStart DateTime
-
-  @@index([windowStart])
-  @@map("api_rate_limit")
-}
-
-// ---------------------------------------------------------------------------
-// Projects & videos
-// ---------------------------------------------------------------------------
-
-enum ProjectStatus {
-  DRAFT
-  QUEUED
-  RUNNING
-  /** Still rendered and waiting for the user to approve or re-roll it. */
-  STILL_READY
-  READY
-  FAILED
-  CANCELLED
-}
-
-enum RenderTier {
-  /// Stage one: a single frame. Costs roughly a hundredth of a motion render,
-  /// which is the entire reason the two-stage pipeline exists — so the margin
-  /// table has to be able to tell them apart.
-  STILL
-  PREVIEW // cheap, low-res, what every generation produces first
-  FINAL // full quality, only on explicit user request
-}
-
-model Project {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  title  String
-  prompt String @db.Text
-
-  // What the narrator says. Separate from `prompt`, which describes what the
-  // camera sees — reading a shot description aloud is not narration. Falls
-  // back to the prompt when a voice is selected and this is empty.
-  script String? @db.Text
-
-  // Catalog-driven values validated in `src/lib/catalog.ts` rather than DB
-  // enums, so new styles/languages/voices ship without a migration.
-  style       String
-  // Where the story is set. Drives the cultural lexicon that replaces generic
-  // nouns before the prompt ever reaches a model — see `settings-catalog.ts`.
-  setting     String @default("dravidian")
-  language    String @default("en")
-  voiceId     String @default("none")
-  aspectRatio String @default("9:16")
-  durationSec Int    @default(5)
-
-  // The approved still, which becomes the first frame of the motion render.
-  // Generating this costs cents; motion costs dollars, so nothing advances
-  // past it without the user explicitly saying so.
-  stillKey        String?
-  stillApprovedAt DateTime?
-
-  status       ProjectStatus @default(DRAFT)
-  errorMessage String?
-  progress     Int           @default(0) // 0-100, surfaced to the UI
-
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
-
-  videos      Video[]
-  jobs        Job[]
-  generations Generation[]
-  reviewItems ReviewItem[]
-
-  @@index([userId, createdAt(sort: Desc)])
-  @@index([status])
-  @@index([deletedAt])
-  @@map("project")
-}
-
-enum VideoStatus {
-  PENDING
-  UPLOADING
-  READY
-  FAILED
-}
-
-model Video {
-  id        String  @id @default(cuid())
-  projectId String
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  tier   RenderTier  @default(PREVIEW)
-  status VideoStatus @default(PENDING)
-
-  // Object storage (Cloudflare R2). Keys, never public URLs — access is
-  // always through a short-lived signed URL.
-  storageKey   String?
-  thumbnailKey String?
-  sizeBytes    Int?
-
-  // Narration, kept as its own object as well as muxed into the video. Playing
-  // it as a separate track is the fallback when the render is not a container
-  // ffmpeg can mux into.
-  audioKey       String?
-  audioMuxed     Boolean @default(false)
-  audioDurationSec Int?
-
-  width       Int?
-  height      Int?
-  durationSec Int?
-  hasAudio    Boolean @default(false)
-
-  providerName String?
-  providerJobId String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([projectId, tier])
-  @@map("video")
-}
-
-// ---------------------------------------------------------------------------
-// Job queue — Postgres-backed, claimed with FOR UPDATE SKIP LOCKED.
-// ---------------------------------------------------------------------------
-
-enum JobType {
-  /** Stage one: the anime still. Cheap, and iterated on before any video. */
-  GENERATE_STILL
-  GENERATE_PREVIEW
-  GENERATE_FINAL
-}
-
-enum JobStatus {
-  QUEUED
-  RUNNING
-  SUCCEEDED
-  FAILED
-  CANCELLED
-  DEFERRED // held back by the daily spend cap
-}
-
-model Job {
-  id        String  @id @default(cuid())
-  projectId String
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  type   JobType
-  status JobStatus @default(QUEUED)
-
-  priority    Int      @default(0) // higher runs first
-  attempts    Int      @default(0)
-  maxAttempts Int      @default(3)
-  runAfter    DateTime @default(now()) // backoff / deferral gate
-
-  // Worker lease. A row is claimed by setting these; a lease older than
-  // LEASE_TIMEOUT is reclaimable, which is how we survive a crashed worker.
-  lockedBy      String?
-  lockedAt      DateTime?
-  heartbeatAt   DateTime?
-  timeoutSec    Int       @default(600)
-
-  // Credits reserved when the job was enqueued; refunded on terminal failure.
-  creditsHeld Int @default(0)
-
-  // Set once the job has been handed to a provider. The worker runs as a step
-  // function — each tick either dispatches or polls — so this has to survive
-  // between ticks rather than living in worker memory.
-  providerName          String?
-  providerJobId         String?
-  estimatedCostUsdMicro Int     @default(0)
-  dispatchedAt          DateTime?
-
-  // Set by the caller so a double-submit cannot create two jobs.
-  idempotencyKey String? @unique
-
-  payload   Json?
-  lastError String? @db.Text
-
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  startedAt   DateTime?
-  completedAt DateTime?
-
-  @@index([status, runAfter, priority(sort: Desc)])
-  @@index([projectId])
-  @@map("job")
-}
-
-// ---------------------------------------------------------------------------
-// Cost tracking — one row per provider call. This is the profitability table.
-// ---------------------------------------------------------------------------
-
-model Generation {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  projectId String?
-  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
-
-  provider String // "fal" | "mock" | ...
-  model    String
-  tier     RenderTier @default(PREVIEW)
-
-  // What we charged vs what it actually cost us.
-  creditsCharged Int @default(0)
-  costUsdMicro   Int @default(0)
-
-  // Unit-economics inputs.
-  durationSec Int?
-  width       Int?
-  height      Int?
-  latencyMs   Int?
-
-  success   Boolean @default(false)
-  errorCode String?
-  errorText String? @db.Text
-
-  // Set when the output was served from the result cache instead of the
-  // provider — cache hits cost us nothing.
-  cacheHit Boolean @default(false)
-
-  createdAt DateTime @default(now())
-
-  @@index([createdAt])
-  @@index([provider, createdAt])
-  @@index([userId, createdAt])
-  @@index([success])
-  @@map("generation")
-}
-
-// Result cache: identical (prompt, style, duration, aspect, tier) reuses the
-// rendered asset instead of paying a provider again.
-model RenderCache {
   id           String   @id @default(cuid())
-  paramsHash   String   @unique
-  storageKey   String
-  thumbnailKey String?
-  audioKey     String?
-  audioMuxed   Boolean  @default(false)
-  width        Int?
-  height       Int?
-  durationSec  Int?
-  sizeBytes    Int?
-  provider     String
-  model        String
-  hits         Int      @default(0)
+  email        String   @unique
+  passwordHash String
+  name         String?
   createdAt    DateTime @default(now())
-  lastUsedAt   DateTime @default(now())
-
-  @@index([lastUsedAt])
-  @@map("render_cache")
 }
 
-model ProviderHealth {
-  name                String    @id
-  healthy             Boolean   @default(true)
-  consecutiveFailures Int       @default(0)
-  disabledUntil       DateTime?
-  lastCheckedAt       DateTime  @default(now())
-  lastError           String?
+// audience values: STUDENT | EARLY_CAREER | FOUNDER | GENERAL (stored as String for SQLite)
+// difficulty values: Easy | Medium | Hard
+// tags: comma-separated free text, e.g. "remote,paid,ai"
+// source values: user-provided | researched
+model Opportunity {
+  id            String    @id @default(cuid())
+  // Human-readable URL segment, e.g. "chevening-scholarship-uk-gov-k2p901".
+  // Built from the row's own title/org plus a suffix of its cuid (see
+  // lib/slug.ts) — derived from stored facts, never invented. Nullable
+  // because it was added to a populated table: rows written before the
+  // backfill (scripts/backfill-slugs.ts) legitimately have none, and
+  // /opportunities/[id] still resolves those by id and 308s to the slug once
+  // one exists. Every write path sets it; a null here means "not backfilled
+  // yet", not "this listing has no name".
+  slug          String?   @unique
+  title         String
+  description   String
+  url           String
+  org           String?
+  audience      String
+  eligibility   String    @default("")
+  prepResources String    @default("")
+  difficulty    String    @default("Medium")
+  tags          String    @default("")
+  location      String?
+  region        String    @default("") // North America | South America | Europe | Africa | Asia | Oceania | Remote / Global | "" (unknown)
+  country       String    @default("") // best-effort from location text, e.g. "India" — "" if not confidently known
+  compType      String?
+  // A short, original 1-2 sentence AI-written summary — never a paraphrase
+  // instruction that could invent facts, only ever describing what's
+  // literally in title/org/description (see lib/scraper/summarize.ai.ts).
+  // Exists because `description` itself is usually scraped verbatim from
+  // the original posting, identical to what Indeed/LinkedIn/the employer's
+  // own site show — real duplicate-content risk that hurts ranking against
+  // higher-authority domains carrying the same text. `summary` is the one
+  // piece of genuinely original copy on the page. Null until the
+  // ingestion-time AI call succeeds or a backfill covers it (see
+  // scripts/backfill-summaries.ts) — the raw description is still shown
+  // and indexed either way, this only adds to it.
+  summary       String?
+  // The four fields below feed the JobPosting structured-data block (see
+  // jobPostingJsonLd() in app/opportunities/[id]/page.tsx) — every one is
+  // null unless the source genuinely provided (addressRegion: derivable
+  // from `location` text itself, e.g. a US "City, ST" suffix) or disclosed
+  // (employmentType/salary: only ever set from a real source-provided
+  // value — see lib/scraper/normalize.ts and lib/scraper/sources/adzuna.ts
+  // — never inferred or estimated). No fabricated field is ever written
+  // here; a still-null value after ingestion means the source truly
+  // doesn't say, and the JSON-LD omits that property rather than guess.
+  addressRegion String?
+  employmentType String?  // Google's enum: FULL_TIME | PART_TIME | CONTRACTOR | TEMPORARY | INTERN | VOLUNTEER | PER_DIEM | OTHER
+  salaryMin     Float?
+  salaryMax     Float?
+  salaryCurrency String?  // ISO 4217, e.g. "USD" — always set together with salaryMin/salaryMax
+  // Real og:image / og:video pulled from the listing's own application
+  // page at ingestion time (lib/ogImage.ts) — never stock media. Null for
+  // most pre-existing rows until a backfill runs; the card renders
+  // text-only when both are null, same as it always has.
+  imageUrl      String?
+  videoUrl      String?
+  // Duplicate-prevention keys — see lib/scraper/dedupe.ts for how each is
+  // derived. `urlKey` is the destination URL with tracking parameters
+  // stripped and the remaining query sorted; it is UNIQUE, so a regression in
+  // the ingestion path fails loudly at the database instead of quietly
+  // minting near-duplicate indexable pages for weeks. One Adzuna ad reached
+  // 33 live URLs before this existed, because the old check compared the raw
+  // url string and Adzuna rotates a tracking token inside it.
+  //
+  // `contentKey` is a lossy title|org|location fingerprint, indexed but NOT
+  // unique and never acted on automatically: measured against this board it
+  // would have collapsed 105 rows, most of them genuinely distinct
+  // requisitions (several employers post multiple open roles under one title
+  // in one city). It feeds the review queue in the weekly SEO cron instead.
+  //
+  // Both nullable because they were added to a populated table — see
+  // scripts/migrate-dedupe-turso.ts, which backfills them and creates the
+  // unique index only after collapsing the existing collisions.
+  urlKey        String?   @unique
+  contentKey    String?
+  // Set on the losing row when a duplicate is collapsed; the row is
+  // soft-deleted at the same time, so it leaves the sitemap and every listing
+  // query. /opportunities/[id] reads this first and 308s to the survivor
+  // rather than 404ing, so an already-indexed duplicate consolidates onto the
+  // canonical URL instead of just disappearing from the index.
+  duplicateOfId String?
+  // Link health. The board's whole promise is "verified, no dead links", but
+  // nothing ever re-checked a listing after ingestion, so postings stayed up
+  // long after the employer took them down — a sampled check found several
+  // 404s and a 410 among live listings. app/api/cron/link-health/route.ts
+  // re-checks the least-recently-checked listings on a rolling schedule.
+  //
+  // `deadStrikes` exists because one failed request is not evidence: hosts
+  // rate-limit, block datacentre IPs, and time out. Only a repeated, clearly
+  // terminal status (404/410) retires a listing, and any inconclusive result
+  // (403/429/5xx/timeout) resets the count rather than accumulating toward a
+  // deletion. There is deliberately no `validThrough` column: no source this
+  // board ingests discloses an application deadline, and inventing one to
+  // satisfy a recommended structured-data field would be exactly the
+  // fabrication the JobPosting block already refuses to do.
+  lastCheckedAt DateTime?
+  deadStrikes   Int       @default(0)
+  // Application deadline, feeding JobPosting's `validThrough`. Null on most
+  // rows and that is correct, not a gap: no feed this board ingests exposes a
+  // deadline field, so a value here was read from something the listing itself
+  // states — either a future source's structured field (RawListing.
+  // deadlineHint) or an explicit phrase in its own description
+  // ("Applications close on 15 March 2027"). See lib/scraper/deadline.ts for
+  // why bare dates and numeric DD/MM vs MM/DD forms are deliberately refused.
+  //
+  // Partial coverage is safe: validThrough is a recommended property and
+  // Google reads structured data per page, so listings that have it gain the
+  // richer result and listings that don't are unaffected. What is not safe is
+  // a wrong one — a past validThrough drops a live posting out of Google Jobs
+  // entirely — hence the extractor errs to null throughout.
+  validThrough  DateTime?
+  // "source" (the feed disclosed it) or "description" (parsed from the
+  // listing's own text). Kept so a bad extraction rule can be audited and
+  // reverted against only the rows it touched, rather than all of them.
+  deadlineSource String?
+  viewCount     Int       @default(0)
+  verified      Boolean   @default(false)
+  featured      Boolean   @default(false)
+  featuredUntil DateTime? // set only for paid "Featured" upsells — the hourly scrape cron unsets `featured` once this passes
+  source        String    @default("user-provided")
+  sourceUrl     String?
+  // Only set for source: "user-provided" via the free public submission
+  // form — kept for admin accountability/abuse-tracking, same pattern as
+  // Resource.submitterEmail. Never rendered on any public page.
+  submitterEmail String?
+  addedAt       DateTime  @default(now())
+  deletedAt     DateTime?
 
-  @@map("provider_health")
+  @@index([audience, addedAt])
+  @@index([verified])
+  @@index([featured])
+  @@index([region])
+  @@index([contentKey])
+  @@index([lastCheckedAt])
 }
 
-// ---------------------------------------------------------------------------
-// Credits & money
-// ---------------------------------------------------------------------------
+// plan/subscriptionStatus are only ever written by a verified payment-provider
+// webhook (lib/billing) — never trust a client request to set them directly.
+model Subscriber {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  // Supabase auth.users.id — set once this subscriber has logged in via the
+  // shared identity flow (see lib/subscriberAuth.ts). Null for email-only
+  // subscribers who've never logged in (anonymous save/checkout provisioning).
+  authUserId   String?  @unique
+  subscribedAt DateTime @default(now())
 
-enum LedgerReason {
-  SIGNUP_GRANT
-  PLAN_RENEWAL
-  PACK_PURCHASE
-  GENERATION_HOLD
-  GENERATION_REFUND
-  ADMIN_GRANT
-  ADMIN_DEDUCT
-  PROMO
-  /// Credits taken back because the money for them was returned. Distinct from
-  /// ADMIN_DEDUCT so a refund is never mistaken for a punitive correction, and
-  /// so the two can be reconciled against `transaction` separately.
-  PURCHASE_REVERSAL
+  plan                   String    @default("free") // "free" | "paid"
+  paymentProvider        String?                     // "razorpay" — more can be added later (e.g. "paypal")
+  paymentSubscriptionId  String?   @unique
+  subscriptionStatus     String?                     // provider's own status string, e.g. "active" | "halted" | "cancelled"
+  currentPeriodEnd       DateTime?
+
+  // Referral loop: this subscriber's own shareable code, and whose code (if
+  // any) they arrived with. Both plain strings, no FK — same loose-coupling
+  // style as the rest of this schema (see OpportunitySubmission.opportunityId).
+  referralCode String? @unique
+  referredBy   String?
+
+  // Free, optional identity verification: proves this subscriber controls
+  // the given email address, nothing more — deliberately no domain
+  // allowlist (that's an ongoing maintenance cost this doesn't need).
+  // institutionEmail is shown as-is on any "Verified" badge, so a reader
+  // judges credibility from the domain themselves (e.g. "@berkeley.edu").
+  institutionEmail                String?
+  institutionVerified             Boolean   @default(false)
+  institutionVerifiedAt           DateTime?
+  institutionVerifyToken          String?   @unique
+  institutionVerifyTokenExpiresAt DateTime?
+
+  // Opts out of the daily digest email only — never deletes the row, since
+  // that would also erase billing/referral history for a paid subscriber.
+  // Checked by app/api/cron/social-digest before every send.
+  unsubscribedFromDigest Boolean @default(false)
+
+  // Auto-suppression from a Resend bounce/complaint webhook (see
+  // app/api/webhooks/resend/route.ts) — distinct from unsubscribedFromDigest
+  // because *why* mail stopped matters: a voluntary unsubscribe is a
+  // preference, a bounce/complaint is a deliverability signal an admin
+  // should be able to see and investigate separately. Null = not suppressed.
+  emailSuppressedReason String? // "bounced" | "complained"
+
+  @@index([plan])
+  @@index([referredBy])
 }
 
-// Append-only. Sum of `delta` for a user must always equal User.credits.
-model CreditLedger {
+// A visitor's bookmarked opportunity. Keyed to the same lightweight
+// Subscriber row + cookie session that already exists for free/paid
+// browsing — no new account system, per lib/subscriberSession.ts's existing
+// low-stakes tradeoff (this data is no more sensitive than early access).
+model SavedOpportunity {
+  id            String    @id @default(cuid())
+  subscriberId  String
+  opportunityId String
+  savedAt       DateTime  @default(now())
+  // Set the first time this subscriber clicks Apply on something they'd
+  // already saved (see app/api/opportunities/[id]/view/route.ts) — the one
+  // real signal for "did saving something here lead anywhere," not a vanity
+  // metric. Null forever for saves that never converted.
+  appliedAt     DateTime?
+  // ── Outcome ──────────────────────────────────────────────────────────
+  // Until this existed the site could not know whether it had ever worked
+  // for anybody. viewCount/verified/featured describe the listing; nothing
+  // described what happened to the person. "No public success stories" was
+  // never a marketing gap — there was no column to put one in, and asking
+  // for testimonials after the fact is the least reliable version of a
+  // thing you can simply record as it happens.
+  //
+  // Null for as long as a chase is open, which is most of them most of the
+  // time. Only ever written by the person who chased it (see
+  // app/api/saved/outcome/route.ts) — never inferred from clicks, never
+  // set by a cron.
+  outcome       String?   // got_it | rejected | no_response | withdrew
+  outcomeAt     DateTime?
+  // Their own words, optional, capped at OUTCOME_NOTE_MAX. Only ever shown
+  // publicly alongside shareConsent.
+  outcomeNote   String?
+  // Explicit, per-outcome permission to show this publicly. Defaults to
+  // false and is asked for separately from the outcome itself: an outcome
+  // is recorded for the person's own tracker first and is not proof until
+  // they say it can be. A "got_it" without consent still counts toward the
+  // aggregate number, never toward a quotable story.
+  shareConsent  Boolean   @default(false)
+
+  @@unique([subscriberId, opportunityId])
+  @@index([subscriberId])
+  // Powers the public proof surface and the outcome-nudge query without a
+  // full scan as the table grows.
+  @@index([outcome])
+}
+
+// A standing subscription to a collection — "tell me when something new
+// lands in Grants for Founders."
+//
+// The push machinery (lib/push.ts) and the save machinery (SavedOpportunity)
+// both already existed; nothing connected either of them to a *standing*
+// interest, so the only signal available for matching was the audience of
+// things a person had already saved — which pings a student about every new
+// student listing on the board. This is the missing half: an explicit,
+// revocable statement of what someone wants to hear about.
+model CollectionAlert {
+  id             String   @id @default(cuid())
+  subscriberId   String
+  // Matches a slug in lib/collectionDefs.ts. Stored rather than joined —
+  // collections are code-defined, not rows.
+  collectionSlug String
+  createdAt      DateTime @default(now())
+  // Last time a push actually went out for this alert, so the throttle is
+  // per-alert rather than per-browser — following three collections should
+  // not mean two of them go silent for six hours.
+  lastNotifiedAt DateTime?
+
+  @@unique([subscriberId, collectionSlug])
+  @@index([subscriberId])
+  @@index([collectionSlug])
+}
+
+// A browser's Web Push subscription — tied to a Subscriber so "matching"
+// (lib/push.ts) can compare newly added opportunities against the
+// audiences of what that subscriber has saved. lastNotifiedAt throttles
+// sends to at most once per window rather than every hourly scrape pass.
+model PushSubscription {
+  id            String    @id @default(cuid())
+  subscriberId  String
+  endpoint      String    @unique
+  p256dh        String
+  auth          String
+  createdAt     DateTime  @default(now())
+  lastNotifiedAt DateTime?
+
+  @@index([subscriberId])
+}
+
+// A paid public submission ("enlist your opportunity"). Nothing here ever
+// becomes a live Opportunity on its own — the Razorpay webhook is the only
+// thing allowed to flip status to "paid" once payment is actually confirmed,
+// and even then the resulting Opportunity is created unverified so it still
+// goes through the same human review queue as everything else.
+model OpportunitySubmission {
+  id               String    @id @default(cuid())
+  razorpayOrderId  String    @unique
+  status           String    @default("pending") // pending | paid | rejected
+  submitterEmail   String
+  payload          String    // JSON string of the submitted opportunity fields
+  opportunityId    String?   // set once the paid Opportunity row is created
+  createdAt        DateTime  @default(now())
+
+  @@index([status])
+}
+
+// The front of the sponsorship funnel — a public lead-capture form
+// (/advertise), not a checkout. `message` is checked against OpenAI's free
+// moderation endpoint (lib/mayatara/moderation.ai.ts) before being stored.
+// Admin reviews these by hand and, for real leads, manually creates the
+// matching SponsoredSlot row after an off-platform deal — same
+// no-self-serve philosophy as SponsoredSlot itself.
+model AdInquiry {
+  id           String   @id @default(cuid())
+  companyName  String
+  contactName  String
+  contactEmail String
+  website      String?
+  message      String
+  status       String   @default("new") // new | contacted | closed
+  createdAt    DateTime @default(now())
+
+  @@index([status])
+}
+
+// A manually-booked sponsor line for the daily Telegram/Discord digest —
+// "Today's picks, brought to you by X." Deliberately has no payment
+// integration: there's no self-serve checkout for this, and none is
+// planned until the distribution channels have enough of an audience that
+// an advertiser would actually pay for a slot. Whoever runs OppIDX invoices
+// a sponsor directly and creates one row here; the digest cron picks up
+// whichever row (if any) covers today's date automatically.
+model SponsoredSlot {
+  id          String   @id @default(cuid())
+  sponsorName String
+  sponsorUrl  String
+  tagline     String   // short line shown alongside the sponsor name, e.g. "Hiring backend engineers"
+  // "sidebar" — the homepage sidebar credit line (the original, only
+  // placement this model was built for). "feed_card" — a single card
+  // rendered near the top of the home board feed, a more prominent
+  // placement for a bigger deal. Every placement shares the same
+  // date-range visibility and admin book/cancel flow; only where it
+  // renders differs.
+  type        String   @default("sidebar")
+  startDate   DateTime
+  endDate     DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([startDate, endDate])
+}
+
+// audience values: STUDENT | EARLY_CAREER | FOUNDER | GENERAL (stored as String for SQLite)
+// category: free text, e.g. "Test Prep" | "Financial Aid" | "Mentorship" | "Templates" | "Courses" | "Communities" | "Tools"
+// source values: submitted (passed automated verification, see lib/resources/verify.ts) | admin | scraped
+//
+// No submission-queue model on purpose — unlike OpportunitySubmission, a
+// public resource submission never sits in a human review queue. It either
+// passes the automated checks in lib/resources/verify.ts and becomes a live
+// (verified) row immediately, or it's rejected outright with a reason and
+// nothing is stored. Admin's own recourse is removal after the fact
+// (deletedAt), not pre-approval.
+model Resource {
+  id          String    @id @default(cuid())
+  title       String
+  description String    @default("")
+  url         String
+  category    String    @default("General")
+  audience    String    @default("GENERAL")
+  verified    Boolean   @default(false)
+  // Original long-form writing hosted directly on the resource's own detail
+  // page (app/resources/[id]) — set only for source: "native" entries. `url`
+  // stays required even then, pointed at a further-reading/primary source,
+  // since it's the one field every other Resource already relies on.
+  body        String    @default("")
+  source      String    @default("submitted")
+  // Only set for source: "submitted" — the submitter's contact email, kept
+  // for admin accountability/abuse-tracking if a listed resource needs to
+  // be removed. Never rendered on any public page.
+  submitterEmail String?
+  addedAt     DateTime  @default(now())
+  deletedAt   DateTime?
+
+  @@index([audience, addedAt])
+  @@index([verified])
+  @@index([category])
+}
+
+// One row per resource scraper pass (see lib/resources/scraper) — kept
+// separate from ScrapeRun (opportunities) so admin can see each scraper's
+// history independently. Same shape on purpose.
+model ResourceScrapeRun {
+  id         String   @id @default(cuid())
+  startedAt  DateTime
+  finishedAt DateTime
+  added      Int      @default(0)
+  details    String   @default("{}")
+
+  @@index([startedAt])
+}
+
+// Anonymous, first-party return-visit tracking — the one honest signal
+// for "does the same visitor come back on a later day, unprompted"
+// (retention, not pageviews). anonId is a random value set in a
+// long-lived cookie (see lib/visitTracking.ts), never tied to an email,
+// account, or IP — this exists purely to answer one question, not to
+// build a profile. One row per (anonId, date): a page load only ever
+// upserts, so refreshing 50 times in a day still counts as one visit.
+model VisitLog {
   id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  anonId String
+  date   String // "2026-07-25" (UTC) — only needs day granularity
 
-  delta        Int
-  balanceAfter Int
-  reason       LedgerReason
-
-  // Loose pointer to what caused the movement (job id, transaction id, ...).
-  refType String?
-  refId   String?
-
-  note      String?
-  createdAt DateTime @default(now())
-
-  @@index([userId, createdAt(sort: Desc)])
-  @@index([refType, refId])
-  @@map("credit_ledger")
+  @@unique([anonId, date])
+  @@index([date])
 }
 
-enum TransactionStatus {
-  CREATED
-  PAID
-  FAILED
-  REFUNDED
+// Weekly snapshot of the Gate-0 retention numbers (see VisitLog) — the
+// live admin Stats tab only ever shows the current all-time number, which
+// makes "is this actually improving" impossible to answer without
+// remembering last week's figure by hand. weekOf: ISO week, e.g.
+// "2026-W30", unique. Generated by app/api/cron/retention-snapshot/route.ts.
+model RetentionSnapshot {
+  id                String   @id @default(cuid())
+  weekOf            String   @unique
+  totalVisitors     Int
+  returningVisitors Int
+  returnRatePct     Int
+  createdAt         DateTime @default(now())
 }
 
-enum TransactionPurpose {
-  CREDIT_PACK
-  SUBSCRIPTION
+// One row per (subscriber, digest date) actually emailed — durable record
+// that does two jobs at once: (1) idempotency, so a same-day cron re-run
+// never double-sends to anyone already logged for that date, and (2) a
+// place for the Resend webhook (app/api/webhooks/resend/route.ts) to
+// update delivery status by resendId, since email_id is the only shared
+// key between "we sent this" and "here's what happened to it."
+model DigestEmailLog {
+  id           String   @id @default(cuid())
+  subscriberId String
+  date         String
+  resendId     String?  @unique
+  status       String   @default("sent") // "sent" | "delivered" | "opened" | "clicked" | "bounced" | "complained" | "failed"
+  createdAt    DateTime @default(now())
+
+  @@unique([subscriberId, date])
+  @@index([date])
 }
 
-model Transaction {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  provider   String // "razorpay" | "stripe"
-  purpose    TransactionPurpose
-  status     TransactionStatus  @default(CREATED)
-
-  // Minor units: paise for INR, cents for USD.
-  amountMinor Int
-  currency    String @default("INR")
-
-  creditsGranted Int    @default(0)
-  planCode       String?
-
-  providerOrderId   String? @unique
-  providerPaymentId String? @unique
-  providerRefundId  String?
-
-  // Guards against a webhook being delivered more than once.
-  fulfilledAt DateTime?
-
-  // Refund. `refundedAt` is the idempotency key, exactly as `fulfilledAt` is
-  // for the payment: the guarded claim on it is what stops a retried refund
-  // returning the money twice.
-  refundedAt        DateTime?
-  refundAmountMinor Int?
-  /// Credits actually taken back, which is not always what was granted — a
-  /// customer may have spent some before asking. Recorded so the gap between
-  /// money returned and value returned is visible rather than inferred.
-  creditsReversed   Int?
-  refundReason      String?
-
-  /// Sequential per financial year, e.g. "ARKA/2026-27/0001". Assigned when
-  /// the payment is fulfilled, never reused, never reassigned — GST requires a
-  /// gapless series and an invoice number that changes is not one.
-  invoiceNumber String?   @unique
-  invoicedAt    DateTime?
-
-  invoiceUrl String?
-  meta       Json?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId, createdAt(sort: Desc)])
-  @@index([status, createdAt])
-  @@map("transaction")
-}
-
-enum SubscriptionStatus {
-  ACTIVE
-  PAST_DUE
-  CANCELLED
-  EXPIRED
-  PENDING
-}
-
-model Subscription {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  planCode String
-  provider String             @default("razorpay")
-  status   SubscriptionStatus @default(PENDING)
-
-  providerSubId String? @unique
-
-  currentPeriodStart DateTime?
-  currentPeriodEnd   DateTime?
-  cancelAtPeriodEnd  Boolean   @default(false)
-  cancelledAt        DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId])
-  @@index([status, currentPeriodEnd])
-  @@map("subscription")
-}
-
-// Plans live in the DB so pricing and credit grants are editable by an admin
-// without a deploy. Seeded from `src/lib/plans.ts`.
-model Plan {
-  code           String  @id
-  name           String
-  description    String?
-  priceMinorInr  Int     @default(0)
-  priceMinorUsd  Int     @default(0)
-  monthlyCredits Int     @default(0)
-  maxConcurrent  Int     @default(1)
-  maxDurationSec Int     @default(5)
-  allowFinal     Boolean @default(false) // access to full-quality renders
-  sortOrder      Int     @default(0)
-  active         Boolean @default(true)
-
-  // Razorpay (or Stripe) plan id, created in the provider's dashboard.
-  // Null means this tier cannot be subscribed to yet; the pricing page says so
-  // rather than opening a checkout that would fail.
-  providerPlanId String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("plan")
-}
-
-// ---------------------------------------------------------------------------
-// Platform
-// ---------------------------------------------------------------------------
-
-model ApiKey {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  name       String
-  prefix     String // first 8 chars, shown in the UI
-  hashedKey  String @unique // sha256 of the full key; the key itself is never stored
-  lastUsedAt DateTime?
-  revokedAt  DateTime?
-  createdAt  DateTime @default(now())
-
-  @@index([userId])
-  @@map("api_key")
-}
-
-// Runtime-tunable configuration: credit costs, daily spend cap, kill switches.
-model AppSetting {
-  key       String   @id
-  value     Json
-  updatedAt DateTime @updatedAt
-  updatedBy String?
-
-  @@map("app_setting")
-}
-
-/// Somebody who asked to be told when Arka opens.
-///
-/// The only reason a holding page is worth putting up at all. Traffic that
-/// arrives before launch and leaves no address is traffic spent for nothing.
-model WaitlistEntry {
-  id    String @id @default(cuid())
-  email String @unique
-
-  /// Where they came from, when a campaign appends ?ref=. Never a full URL —
-  /// that can carry anything a link was decorated with.
-  source String?
-
-  /// Set when the launch announcement actually goes out, so a second send
-  /// cannot mail the same person twice.
-  notifiedAt DateTime?
-
-  createdAt DateTime @default(now())
+// A durable, shareable snapshot of one day's "Today's picks from OppIDX"
+// social-digest run (see app/api/cron/social-digest/route.ts) — the picks
+// themselves are randomly sampled at generation time and never otherwise
+// persisted, so this is what a shared /newsletter/[date] link actually
+// points to. date: "2026-07-25", unique, doubles as the shareable URL
+// slug. opportunityIds: JSON array of picked Opportunity ids, joined live
+// at render time (same pattern as SavedOpportunity) so an edited listing
+// shows its current details. totalOpportunities/newLast24h are the real
+// board counts at generation time — same source as /api/stats, snapshotted
+// so they don't silently drift on an old page.
+model DailyDigest {
+  id                 String   @id @default(cuid())
+  date               String   @unique
+  opportunityIds     String
+  totalOpportunities Int
+  newLast24h         Int
+  createdAt          DateTime @default(now())
 
   @@index([createdAt])
-  @@map("waitlist_entry")
 }
 
-/// Content flagged for a person to look at.
-///
-/// The moderation filter has two outcomes — allow or refuse — and that is a
-/// gap. Plenty of prompts are neither clearly fine nor clearly forbidden,
-/// especially on a product whose subject is religion, and a binary filter
-/// resolves every one of them by guessing. This is the third outcome: it
-/// renders, and a human sees it afterwards.
-model ReviewItem {
-  id        String @id @default(cuid())
-  userId    String
-  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  projectId String?
-  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+// A generated, shareable snapshot of Mayatara Pulse content for one day or
+// week — see lib/policyDigest/generate.ts. Snapshotted at generation time on
+// purpose: pulse_headlines (Supabase) is a rolling 14-day window that
+// upserts on url conflict, so a still-current headline's fetched_at keeps
+// getting bumped forward — it can't reconstruct "what this looked like on
+// a specific past day." A PolicyDigest row is the durable, unchanging
+// record a shared link actually points to.
+// periodType: "daily" | "weekly". period: "2026-07-24" (daily) or
+// "2026-W30" (ISO week, weekly) — unique, doubles as the shareable URL slug.
+// items: JSON array of { title, url, category, source, sourceType }.
+model PolicyDigest {
+  id         String   @id @default(cuid())
+  period     String   @unique
+  periodType String
+  summary    String
+  items      String
+  createdAt  DateTime @default(now())
 
-  /// Which heuristic raised it, e.g. "religion.sensitive".
-  reason String
-  /// What the user wrote. Retained only until the item is resolved.
-  excerpt String @db.Text
-
-  status     ReviewStatus @default(PENDING)
-  resolvedBy String?
-  resolvedAt DateTime?
-  note       String?
-
-  createdAt DateTime @default(now())
-
-  @@index([status, createdAt])
-  @@index([userId])
-  @@map("review_item")
+  @@index([periodType, createdAt])
 }
 
-enum ReviewStatus {
-  PENDING
-  /// Looked at, nothing wrong. The render stands.
-  CLEARED
-  /// Taken down. The project is deleted and the user told.
-  REMOVED
+// One row per native scraper pass (see lib/scraper). `details` is a JSON
+// string keyed by source name: { fetched, added, error }.
+model ScrapeRun {
+  id         String   @id @default(cuid())
+  startedAt  DateTime
+  finishedAt DateTime
+  added      Int      @default(0)
+  details    String   @default("{}")
+
+  @@index([startedAt])
 }
 
-model Feedback {
-  id     String  @id @default(cuid())
-  userId String?
-  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+// The one discussion primitive, attachable to anything in the feed —
+// itemType/itemId instead of a relation, same loose-coupling style as
+// Subscriber.referredBy: one model instead of a thread table per content
+// type. itemType is "opportunity" today; more kinds reuse this as they
+// join the feed rather than getting their own comment table.
+model Comment {
+  id           String    @id @default(cuid())
+  itemType     String
+  itemId       String
+  subscriberId String
+  body         String
+  createdAt    DateTime  @default(now())
+  deletedAt    DateTime?
 
-  rating  Int? // 1-5, optional
-  message String  @db.Text
-  page    String?
-  meta    Json?
-
-  resolved  Boolean  @default(false)
-  createdAt DateTime @default(now())
-
-  @@index([createdAt(sort: Desc)])
-  @@map("feedback")
-}
-
-model AuditLog {
-  id      String  @id @default(cuid())
-  actorId String?
-  actor   User?   @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
-
-  action     String // "user.ban", "credits.refund", ...
-  targetType String?
-  targetId   String?
-  meta       Json?
-  ip         String?
-
-  createdAt DateTime @default(now())
-
-  @@index([createdAt(sort: Desc)])
-  @@index([action])
-  @@map("audit_log")
-}
-
-// Structured application log for anything worth keeping after the request ends
-// (provider errors, webhook failures, queue incidents).
-model SystemLog {
-  id        String   @id @default(cuid())
-  level     String   @default("info") // info | warn | error
-  scope     String // "queue" | "provider.fal" | "webhook.razorpay"
-  message   String   @db.Text
-  meta      Json?
-  createdAt DateTime @default(now())
-
-  @@index([createdAt(sort: Desc)])
-  @@index([level, createdAt(sort: Desc)])
-  @@map("system_log")
-}
-
-// Rolling per-day spend counter, used by the budget guard. One row per UTC day.
-model DailySpend {
-  day          DateTime @id @db.Date
-  costUsdMicro Int      @default(0)
-  generations  Int      @default(0)
-  updatedAt    DateTime @updatedAt
-
-  @@map("daily_spend")
+  @@index([itemType, itemId, createdAt])
+  @@index([subscriberId])
 }
